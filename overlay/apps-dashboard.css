@@ -1,0 +1,50 @@
+/* SideLoader compact Apps manager and version corners */
+.setup-step[data-step="1"]:not([open])>summary,
+.setup-step[data-step="2"]:not([open])>summary { min-height:42px; padding:7px 13px; gap:9px; }
+.setup-step[data-step="1"]:not([open]) .step-caption,
+.setup-step[data-step="2"]:not([open]) .step-caption {display:flex; align-items:center; gap:10px; justify-content:space-between;}
+.setup-step[data-step="1"]:not([open]) .step-label,
+.setup-step[data-step="2"]:not([open]) .step-label {display:none;}
+.setup-step[data-step="1"]:not([open]) .step-caption b,
+.setup-step[data-step="2"]:not([open]) .step-caption b {font-size:14px; flex:none;}
+.setup-step[data-step="1"]:not([open]) .step-caption small,
+.setup-step[data-step="2"]:not([open]) .step-caption small {font-size:12px; text-align:right; margin:0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.setup-step[data-step="1"]:not([open]) .step-number,
+.setup-step[data-step="2"]:not([open]) .step-number {width:24px; height:24px; font-size:12px;}
+.setup-step[data-step="1"]:not([open]) .step-state,
+.setup-step[data-step="2"]:not([open]) .step-state {font-size:16px; width:20px;}
+.sl-app-manager {padding:5px 12px 12px;}
+.sl-app-toolbar {display:flex; flex-wrap:wrap; align-items:center; gap:9px; margin-bottom:8px;}
+.sl-app-toolbar label {font-size:12px; color:var(--label-2);}
+.sl-app-toolbar select.fi {max-width:220px; flex:1 1 110px; min-width:100px;}
+.sl-app-toolbar .cap {min-height:35px;}
+.sl-app-help {margin:8px 1px!important;}
+.sl-app-count {font-size:12px; color:var(--label-2); margin:10px 3px;}
+.sl-app-list {max-height:430px; overflow-y:auto;}
+.sl-app-entry {display:flex; align-items:center; gap:11px; min-height:54px; padding:9px 13px; border-bottom:1px solid var(--sep);}
+.sl-app-entry:last-child {border-bottom:none;}
+.sl-app-select {flex:none; display:flex; align-items:center;}
+.sl-app-select input {width:18px; height:18px; accent-color:var(--blue);}
+.sl-app-detail {flex:1; min-width:0; overflow-wrap:anywhere; display:flex; flex-direction:column; gap:2px;}
+.sl-app-detail b {font-size:14px; line-height:1.25;}
+.sl-app-detail small {font-size:11px; color:var(--label-2); line-height:1.2;}
+.sl-app-entry>.cap {flex:none; min-height:33px;}
+.device-app-import-label {font-size:11px; letter-spacing:.04em; font-weight:600; color:var(--label-2); padding:14px 14px 4px;}
+.sl-compact-versions {margin:13px 3px 17px; padding:8px 10px; font-size:12px; color:var(--label-2); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px 12px; border-top:1px solid var(--sep);}
+.sl-compact-left,.sl-compact-right {display:flex; align-items:center; gap:7px; flex-wrap:wrap;}
+.sl-compact-versions a {color:var(--label-2); text-decoration:none;}
+.sl-compact-versions a:hover{text-decoration:underline;}
+.sl-compact-right .cap {font-size:12px; min-height:31px; padding:5px 9px;}
+.sl-update-status {font-size:11px; white-space:nowrap;}
+.sl-update-status.current {color:var(--green); font-weight:600;}
+.sl-update-status.update {color:#c93434; font-weight:800;}
+.sl-update-status.unknown {color:var(--orange);}
+.sl-compact-message {flex-basis:100%; font-size:11px; color:var(--label-2);}
+@media(max-width:600px){
+  .sl-app-toolbar select.fi {flex:1 1 100%; max-width:none;}
+  .sl-app-entry{gap:7px; padding:9px 8px;}
+  .sl-app-entry>.cap {font-size:12px; padding:7px 8px;}
+  .sl-compact-versions {font-size:11px;}
+  .setup-step[data-step="1"]:not([open]) .step-caption small,
+  .setup-step[data-step="2"]:not([open]) .step-caption small {max-width:52%;}
+}
