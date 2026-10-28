@@ -19,7 +19,7 @@ def replace_once(path, original, replacement, marker):
     path.write_text(source.replace(original, replacement, 1))
 
 
-for name in ('installed.py', 'diagnostics.py'):
+for name in ('installed.py', 'diagnostics.py', 'account.py'):
     (package / name).write_bytes((overlays / name).read_bytes())
 
 server = package / 'server.py'
@@ -27,6 +27,10 @@ replace_once(server,
     'from . import auth, config, ipa, pairing, store',
     'from . import auth, config, ipa, pairing, store\nfrom .installed import enrich_apps  # SideLoader installation verification\nfrom .diagnostics import report as diagnostic_report',
     'from .installed import enrich_apps')
+replace_once(server,
+    'from .diagnostics import report as diagnostic_report',
+    'from .diagnostics import report as diagnostic_report\nfrom .account import forget_account',
+    'from .account import forget_account')
 replace_once(server,
     '"apps": [store.app_view(a) for a in store.app_ids()],',
     '"apps": enrich_apps([store.app_view(a) for a in store.app_ids()], live),',
@@ -36,7 +40,46 @@ replace_once(server,
     'if path == "/api/logs":\n                return self.send(200, app.logs())\n            if path == "/api/diagnostics":\n                return self.send(200, diagnostic_report(app).encode("utf-8"), "text/plain; charset=utf-8")',
     'if path == "/api/diagnostics":')
 
+# Removing an account is authenticated, disallows running jobs, and leaves
+# saved device pairing and IPAs untouched.
+replace_once(server,
+    '    def settings(self, data):',
+    '    def remove_apple_account(self, data):\n'
+    '        return forget_account(self)\n\n'
+    '    def settings(self, data):',
+    '    def remove_apple_account(self, data):')
+replace_once(server,
+    '            "/api/appleid": self.apple_id,',
+    '            "/api/appleid": self.apple_id,\n'
+    '            "/api/appleid/remove": self.remove_apple_account,',
+    '"/api/appleid/remove": self.remove_apple_account')
+
 index = package / 'index.html'
+# Step 2 account removal works both before and after navigation has been
+# transformed; only show the button when an account is saved.
+replace_once(index,
+    '    </div></form>\n    <div class="foot">Use the regular password, not an app-specific one.</div>',
+    '''    </div></form>
+    ${c.apple_id ? `<div class="step-account-remove"><button type="button" id="sideloader-remove-account" class="cell action" style="color:#c93434">Remove Apple Account</button><div class="foot">Clears SideLoader sign-in details and stops renewal. Saved apps and device pairing remain.</div></div>` : ""}
+    <div class="foot">Use the regular password, not an app-specific one.</div>''',
+    'id="sideloader-remove-account"')
+replace_once(index,
+    '  on("useipa", "onclick", () =>',
+    '''  on("sideloader-remove-account", "onclick", () => {
+    if (!window.confirm("Remove this Apple Account from SideLoader? The saved password and signing cache will be deleted, automatic renewal disabled, and app/device records kept. This does not delete or unlock the Apple Account at Apple.")) return;
+    act(async () => {
+      await api("/api/appleid/remove", {json:{}});
+      setupChoice = 2;
+      setupDoneSnapshot = null;
+      // render() preserves form values, so remove the previous email immediately.
+      const email = $("#aid"), password = $("#apw");
+      if (email) email.value = "";
+      if (password) password.value = "";
+    }, "Apple Account removed from SideLoader");
+  });
+  on("useipa", "onclick", () =>''',
+    'on("sideloader-remove-account", "onclick"')
+
 replace_once(index,
     'function sig(t) {\n  const e = t.signature.expiry, left = e ? e - S.now : 0;',
     '''function sig(t) {
