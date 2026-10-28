@@ -26,6 +26,7 @@ Usage: ./bin/build-docker.sh [--no-start] [--open] [--logs] [--help]
 
 The upstream checkout and all persistent data stay in ignored build/.
 The upstream is never upgraded automatically on subsequent builds.
+This script is local-only: it never pushes to GitHub or runs GitHub Actions.
 USAGE
 }
 while [[ $# -gt 0 ]]; do
@@ -89,6 +90,7 @@ else
 fi
 printf '\nSideLoader version: %s\n' "$(cat "$ROOT_DIR/VERSION")"
 printf 'Local build: %s\n' "$UPSTREAM"
+printf 'GitHub: unchanged (no push or GitHub Actions).\n'
 if [[ "$START" == true ]]; then
   printf 'Dashboard: http://localhost:38080\n'
   printf 'iPhone on same Wi-Fi: http://<server-LAN-IP>:38080\n'
