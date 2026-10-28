@@ -133,4 +133,16 @@ replace(index,
   on("sideloader-remove-account", "onclick",''',
         'on("sideloader-altserver-updates", "onclick"')
 
+# Prominent links beside the actual running version, including upstream history.
+# This executes on both a first build and previously-patched local checkouts.
+replace(index,
+        '<span>${version}</span><button type="button" class="cap" id="sideloader-altserver-updates"',
+        '<span>${version}</span>'
+        '<a class="cap" href="https://github.com/jaakkopalvaila/AltServer-Linux/tree/ng" '
+        'target="_blank" rel="noopener noreferrer" aria-label="Open maintained AltServer-Linux NG source on GitHub">GitHub source</a>'
+        '<a class="cap" href="https://github.com/jaakkopalvaila/AltServer-Linux/commits/ng" '
+        'target="_blank" rel="noopener noreferrer" aria-label="View recent AltServer-Linux NG commits">Recent commits</a>'
+        '<button type="button" class="cap" id="sideloader-altserver-updates"',
+        "prominent upstream repository and commit links")
+
 print("Pinned AltServer-Linux NG provenance and safe manual GitHub update checks exposed in Apps UI.")

@@ -50,11 +50,8 @@ PY
   uninstall)
     if [[ -f "$PLIST" ]]; then
       launchctl bootout "$SCOPE" "$PLIST" >/dev/null 2>&1 || true
-      osascript - "$PLIST" <<'APPLESCRIPT'
-on run argv
-  tell application "Finder" to delete POSIX file (item 1 of argv)
-end run
-APPLESCRIPT
+      # Remove our own LaunchAgent silently; avoid Finder/Trash UI prompts.
+      rm -f -- "$PLIST"
     fi
     echo 'macOS USB relay removed.'
     ;;
