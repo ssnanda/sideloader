@@ -8,11 +8,17 @@ A minimal, source-driven **three-app Wi-Fi renewal** manager for one iPhone with
 
 | Script | Default behavior |
 |---|---|
-| `./bin/pull-latest.sh` | Fast-forward local `main` from GitHub without overwriting local edits; if run in an extracted non-git copy, clone to `~/Projects/sideloader` |
-| `./bin/bump-version.sh` | Show a version menu; **Enter = patch**; **Enter = commit all non-ignored changes and push to main** with `[skip ci]` |
-| `./bin/build-docker.sh` | Install/verify prerequisites, obtain Sideloop upstream if missing, apply sources overlay, validate Compose, build and start Docker in the background |
+| `./bin/pull-latest.sh` | Siftidy-style **stash → pull --rebase → restore** (including untracked edits). `-f` explicitly replaces local work, but leaves ignored `build/` untouched. If running from a ZIP, clone into `~/Projects/sideloader`. |
+| `./bin/bump-version.sh` | Siftidy-style **patch/minor/major/build/custom/no-bump** menu, using `X.Y.Z+B` in `VERSION` and the highest published Git tag as a version floor. **Enter = patch**, **Enter = commit and push** with `[skip ci]`. Supports `--no-push`, `--yes`, `--no-bump`. |
+| `./bin/build-docker.sh` | Siftidy-style local builder: check prerequisites, download Sideloop to ignored `build/sideloop/` if absent, patch/validate, build and start Docker. `--no-start` builds only; `--open` opens dashboard; `--logs` follows logs. |
 
-Run the build script again after you change source code to rebuild/restart. To stop it, use `docker compose` with the two files shown below, or Docker Desktop's container UI. Runtime state lives in **ignored** `build/sideloop/data/` and is never committed (Apple password, pairing data, IPA files).
+All three scripts accept **no arguments**; defaults match the Siftidy workflow. Run the build script again after source updates to rebuild/restart. To stop it, use `docker compose` with the two files shown below, or Docker Desktop's container UI. Runtime state lives in **ignored** `build/sideloop/data/` and is never committed (Apple password, pairing data, IPA files).
+
+## Workflow and local build isolation
+
+- **Pull:** by default, preserve staged, unstaged, and untracked edits using an autostash, rebase on the current branch, then restore edits. On conflicts, stop rather than overwrite. `-f` intentionally discards local changes and unpushed commits; ignored Docker build data remains.
+- **Bump:** stores version as `X.Y.Z+B` (starting `0.1.1+1`). Press Enter twice to choose patch and confirm commit/push. The remote branch is synchronized through `pull-latest.sh` before pushing. The `build/` directory and secrets are ignored.
+- **Build:** fetches no SideLoader GitHub changes, creates no release, and publishes no Docker image. Upstream Sideloop code, generated container data, phone pairing, settings and IPA cache are in `build/sideloop/`, never GitHub. The `--no-start` flag builds without restarting containers.
 
 ## First install on Ubuntu
 
