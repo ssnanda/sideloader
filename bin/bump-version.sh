@@ -189,7 +189,15 @@ else
   echo "Version: $CURRENT_VERSION -> $NEXT_VERSION"
 fi
 if [[ "$DO_PUSH" == true ]]; then
-  "$ROOT_DIR/bin/pull-latest.sh"
-  git push origin "$BRANCH"
+  # pull-latest.sh intentionally reports local commits as ahead of GitHub;
+  # a fresh release commit is SUPPOSED to be ahead. Synchronize safely here
+  # instead. Never force-push or discard local changes.
+  echo "Fetching origin/$BRANCH before publishing..."
+  git fetch origin "$BRANCH"
+  if ! git merge-base --is-ancestor FETCH_HEAD HEAD; then
+    echo 'Remote has newer commits; rebasing the local release before pushing.'
+    git rebase FETCH_HEAD
+  fi
+  git push origin "HEAD:$BRANCH"
   echo "Pushed version to origin/$BRANCH. Run ./bin/build-docker.sh to rebuild locally."
 fi

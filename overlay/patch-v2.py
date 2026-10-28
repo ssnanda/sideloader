@@ -143,9 +143,21 @@ elif grep -qiE 'two.?factor code|verification code' "$out"; then''',
 # Build fixes: run the currently maintained NG AltServer with Mac-compatible anisette,
 # retain Sideloop's profile and chunking patches, and add the inventory utility.
 dockerfile = root / 'Dockerfile'
-replace_once(dockerfile, 'ARG ALTSERVER_TAG=ng-2026-09-13',
-             'ARG ALTSERVER_TAG=ng\nARG ALTSERVER_REV=5c32531fe0eb6ff87ed8f7b137da803c91945a02',
-             'ARG ALTSERVER_REV=5c32531fe0eb6ff87ed8f7b137da803c91945a02')
+# The original Sideloop image used ng-2026-09-13; another local Codex
+# revision changed it to ng-2026-10-20. Both are supported inputs. A failed
+# prior run can also leave this Dockerfile only partially patched; do not
+# overwrite that state or accept an unrecognized signing revision silently.
+revision = '5c32531fe0eb6ff87ed8f7b137da803c91945a02'
+expected = f'ARG ALTSERVER_TAG=ng\nARG ALTSERVER_REV={revision}'
+docker_source = dockerfile.read_text()
+if expected not in docker_source:
+    known = ('ARG ALTSERVER_TAG=ng-2026-09-13',
+             'ARG ALTSERVER_TAG=ng-2026-10-20')
+    matches = [tag for tag in known if tag in docker_source]
+    if len(matches) != 1:
+        sys.exit('Cannot safely patch Dockerfile: unknown AltServer revision; '
+                 'preserving the existing file')
+    dockerfile.write_text(docker_source.replace(matches[0], expected, 1))
 replace_once(dockerfile, 'ARG ALTSERVER_TAG\nCOPY altserver',
              'ARG ALTSERVER_TAG\nARG ALTSERVER_REV\nCOPY altserver',
              'ARG ALTSERVER_TAG\nARG ALTSERVER_REV\nCOPY')
