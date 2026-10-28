@@ -33,9 +33,33 @@ def save():
 
 
 MARKER = '/* SideLoader streamlined navigation and setup steps */'
+
+
+def upgrade_offline_step():
+    """Update existing patched dashboards too; never clear saved device pairing."""
+    global source
+    changes = (
+        ('  const deviceDone = devs.length > 0;',
+         '  const deviceDone = devs.length > 0 && onlineDevice;'),
+        ('  if (setupDoneSnapshot) {\\n    for (let i = 0;',
+         '  if (setupDoneSnapshot) {\\n'
+         '    // A connected phone going offline returns the wizard to Step 1.\\n'
+         '    if (setupDoneSnapshot[0] && !deviceDone) setupChoice = null;\\n'
+         '    for (let i = 0;'),
+        ('"Saved · Offline"', '"Saved · Offline — reconnect to continue"'),
+    )
+    for before, after in changes:
+        if after in source:
+            continue
+        if source.count(before) != 1:
+            sys.exit('Cannot safely upgrade offline Step 1: missing or ambiguous wizard anchor')
+        source = source.replace(before, after, 1)
+
+
 if MARKER in source:
+    upgrade_offline_step()
     save()
-    print('SideLoader navigation already installed; floating controls removed.')
+    print('SideLoader navigation already installed; offline Step 1 updated.')
     sys.exit(0)
 
 
@@ -232,5 +256,6 @@ replace('    <div class="list"><pre class="logs" id="logs">Loading…</pre></div
         '    <div class="list"><button class="cell action" type="button" id="sideloader-copy-diagnostics">Copy Diagnostics</button><pre class="logs" id="logs">Loading…</pre></div></div>`;',
         'Activity diagnostics action')
 replace('</style>', css + '</style>', 'step and tab styles')
+upgrade_offline_step()
 save()
 print('SideLoader setup wizard and three-tab navigation installed.')

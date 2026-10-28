@@ -102,6 +102,9 @@ class NavigationTests(unittest.TestCase):
       self.assertNotIn('minisideload-link',out)
       self.assertNotIn('sideloader-diagnostics-controls',out)
       self.assertIn('copy.isConnected',out)
+      self.assertIn('const deviceDone = devs.length > 0 && onlineDevice;', out)
+      self.assertIn('setupDoneSnapshot[0] && !deviceDone', out)
+      self.assertIn('Saved · Offline — reconnect to continue', out)
       # Check the injected browser-side JavaScript parses.
       from html.parser import HTMLParser
       class Scripts(HTMLParser):
@@ -119,5 +122,29 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
       subprocess.run(args,check=True,capture_output=True,text=True)
       self.assertEqual(out,page.read_text(),'Second patch must be idempotent')
+
+  def test_existing_dashboard_upgrades_offline_status_without_replacing_wizard(self):
+    # Simulate an already-patched installation from the previous release.
+    with tempfile.TemporaryDirectory() as temp:
+      package=Path(temp)/'sideloop'
+      package.mkdir()
+      page=package/'index.html'
+      page.write_text(INDEX)
+      args=[sys.executable,str(PATCH),temp,str(OVERLAY)]
+      subprocess.run(args,check=True,capture_output=True,text=True)
+      expected=page.read_text()
+      previous=expected.replace(
+        '  const deviceDone = devs.length > 0 && onlineDevice;',
+        '  const deviceDone = devs.length > 0;',1).replace(
+        '    // A connected phone going offline returns the wizard to Step 1.\\n'
+        '    if (setupDoneSnapshot[0] && !deviceDone) setupChoice = null;\\n',
+        '',1).replace(
+        'Saved · Offline — reconnect to continue', 'Saved · Offline',1)
+      self.assertNotEqual(previous,expected)
+      page.write_text(previous)
+      subprocess.run(args,check=True,capture_output=True,text=True)
+      self.assertEqual(page.read_text(), expected)
+      subprocess.run(args,check=True,capture_output=True,text=True)
+      self.assertEqual(page.read_text(), expected)
 
 if __name__=='__main__':unittest.main()
