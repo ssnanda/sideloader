@@ -70,8 +70,11 @@ if 'appleInfo.state === "verified"' not in index.read_text():
             'appleDone ? "Account details saved" : "Enter account and password"',
             'appleDone ? "Credentials saved · not verified with Apple" : "Enter account and password"',
             "explain saved credentials")
-replace(index,
-        'c.auto_check ? "Automatic renewal enabled" : "Automatic renewal disabled"',
-        'c.auto_check ? "Renewal enabled · success not yet verified" : "Automatic renewal disabled"',
-        "explain enabled does not mean successfully renewed")
+# Automatic renewal moved out of the wizard by patch-install-workflow.py.
+# The previous Step 4 subtitle no longer exists on rebuilt installations.
+if '/* SideLoader four-stage installation workflow v1 */' not in index.read_text():
+    replace(index,
+            'c.auto_check ? "Automatic renewal enabled" : "Automatic renewal disabled"',
+            'c.auto_check ? "Renewal enabled · success not yet verified" : "Automatic renewal disabled"',
+            "explain enabled does not mean successfully renewed")
 print("SideLoader device health refresh: every 30s, last-checked display and stale-state protection.")
