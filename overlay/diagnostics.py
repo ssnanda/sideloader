@@ -34,6 +34,9 @@ def report(app):
         'Services: device_mux=' + str(state['services']['muxer']) + ', anisette=' + str(state['services']['anisette']),
         'Auto refresh: ' + str(state['config']['auto_check']),
         'Registered devices: ' + str(len(state['registered'])),
+        'Signing safety: blocked=' + str(bool(state.get('signing_guard', {}).get('blocked'))) +
+            ' code=' + str(state.get('signing_guard', {}).get('code', 'none')) +
+            ' reason=' + str(state.get('signing_guard', {}).get('reason', 'none')),
         '', 'App inventory:',
     ]
     for entry in state['apps']:
@@ -50,6 +53,8 @@ def report(app):
         raw = (config.STATE / 'refresh.log').read_text(errors='replace').splitlines()[-250:]
     except OSError:
         raw = []
+    if not raw:
+        lines.append('(no saved Activity/signing logs)')
     for ln in raw:
         clean = scrub(ln, secrets)
         if clean != '[sensitive signing output omitted]':
