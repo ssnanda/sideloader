@@ -92,3 +92,10 @@ Run `./bin/pull-latest.sh` followed by `./bin/build-docker.sh` in the checked-ou
 ### What is not verified
 
 These changes have unit-level and syntax checks but have not been tested against your iOS 27 device. If the updated backend cannot build or sign, copy the sanitized diagnostics from the dashboard and share them. Do not remove the current iPhone app or delete signing data as part of troubleshooting.
+
+
+## Connection status and setup checks
+
+The phone check runs every **30 seconds**. The Apps dashboard refreshes automatically and Step 1 shows the local time of the most recent completed device check. If a check is older than 2 minutes, SideLoader displays **Status unverified** rather than claiming the phone is online or offline. A saved pairing is not the same as a currently reachable iPhone. You can also use **Scan Again** within Step 1.
+
+Step 2 confirms that an Apple Account email and password are saved **but does not test the Apple sign-in**. Do not repeatedly submit credentials after an Apple security error. Step 3 uses the real iPhone app inventory to confirm installation. Step 4 being enabled only means automatic renewal is configured; it does not prove a refresh succeeded.

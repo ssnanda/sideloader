@@ -78,6 +78,7 @@ chmod 700 "$UPSTREAM/data"
 python3 "$ROOT_DIR/overlay/patch-upstream.py" "$UPSTREAM" "$ROOT_DIR/overlay"
 python3 "$ROOT_DIR/overlay/patch-v2.py" "$UPSTREAM" "$ROOT_DIR/overlay"
 python3 "$ROOT_DIR/overlay/patch-navigation.py" "$UPSTREAM" "$ROOT_DIR/overlay"
+python3 "$ROOT_DIR/overlay/patch-device-health.py" "$UPSTREAM"
 python3 -m py_compile "$UPSTREAM/sideloop/server.py" "$UPSTREAM/sideloop/sources.py" "$UPSTREAM/sideloop/installed.py" "$UPSTREAM/sideloop/diagnostics.py"
 compose=( docker compose -f "$UPSTREAM/docker-compose.yml" -f "$OVERRIDE" )
 "${compose[@]}" config --quiet || { echo 'Docker Compose configuration is invalid.' >&2; exit 1; }
