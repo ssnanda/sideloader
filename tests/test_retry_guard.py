@@ -86,6 +86,24 @@ class RetryGuardTests(unittest.TestCase):
         guard.resume()
         self.assertFalse(guard.status()["blocked"])
 
+    def test_36607_blocks_with_explanation_without_claiming_account_lock(self):
+        result = guard.failed(
+            "Unable to sign you in to your Apple Account. Try again later. (-36607)", 1)
+        self.assertTrue(result["blocked"])
+        self.assertEqual(result["code"], "-36607")
+        self.assertEqual(result["reason"], "apple_authentication_unavailable")
+        self.assertIn("anisette", result["message"])
+        self.assertIn("Do not retry", result["action"])
+        self.assertNotIn("locked", result["message"])
+        with self.assertRaises(RuntimeError):
+            guard.assert_allowed()
+
+    def test_pty_36607_refines_generic_error_without_retry(self):
+        guard.failed("", 1)
+        updated = guard.failed("AltServer: Unable to sign you in to your Apple Account. Try again later. (-36607)", 1)
+        self.assertEqual(updated["code"], "-36607")
+        self.assertTrue(updated["blocked"])
+
     def test_explicit_code_action_for_80046(self):
         state = guard.failed("AltServer finished: (-80046)")
         self.assertIn("not established", state["message"])

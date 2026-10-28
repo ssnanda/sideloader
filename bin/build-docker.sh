@@ -88,6 +88,7 @@ python3 "$ROOT_DIR/overlay/patch-apple-verification.py" "$UPSTREAM"
 python3 "$ROOT_DIR/overlay/patch-install-workflow.py" "$UPSTREAM"
 python3 "$ROOT_DIR/overlay/patch-backend-info.py" "$UPSTREAM" "$ROOT_DIR/overlay"
 python3 "$ROOT_DIR/overlay/patch-sideloop-version.py" "$UPSTREAM" "$ROOT_DIR/overlay" "$ROOT_DIR/VERSION"
+python3 "$ROOT_DIR/overlay/patch-responsive-ui.py" "$UPSTREAM"
 python3 -m py_compile "$UPSTREAM/sideloop/server.py" "$UPSTREAM/sideloop/sources.py" "$UPSTREAM/sideloop/installed.py" "$UPSTREAM/sideloop/diagnostics.py" "$UPSTREAM/sideloop/github_sources.py" "$UPSTREAM/sideloop/github_scan.py" "$UPSTREAM/sideloop/retry_guard.py" "$UPSTREAM/sideloop/account.py" "$UPSTREAM/sideloop/backend_info.py" "$UPSTREAM/sideloop/sideloop_info.py"
 compose=( docker compose -f "$UPSTREAM/docker-compose.yml" -f "$OVERRIDE" )
 "${compose[@]}" config --quiet || { echo 'Docker Compose configuration is invalid.' >&2; exit 1; }

@@ -25,3 +25,10 @@ The Apps page displays **Sideloop core** separately from AltServer-Linux: the Si
 ## Existing-checkout installation workflow migration (v0.2.0+18)
 
 `./bin/build-docker.sh` can be run repeatedly against the existing ignored `build/sideloop/` checkout. The Step 4 Install migration recognizes both the old dashboard's immediate closing template tag and the newer navigation overlay's separate closing line. It also recognizes the navigation overlay's `data-step-open="3"` control instead of expecting only `data-go="settings"`. Both layouts are validated before removing the duplicate install controls. If an unknown dashboard layout is encountered, the patch stops without writing a partially migrated index page. This fixes `Cannot safely locate duplicate install controls` without deleting IPAs, account information, pairing, or other runtime data. Four targeted regression tests cover both markup variants, repeat builds, JavaScript syntax, and safety checks.
+
+
+## Responsive layout and Apple authentication status (v0.2.0+19)
+
+The Apps screen uses a wider desktop layout and wraps AltServer-Linux version, GitHub source, recent commits, and update controls without overlapping at different browser zoom levels. The original mobile layout remains. The responsive patch runs on every build and is repeat-safe for existing `build/sideloop` checkouts.
+
+AltServer error `-36607` is now classified explicitly as an **Apple authentication response** (possibly involving the configured anisette service), **not** proof that the Apple Account is locked or the password is wrong. After the first unsuccessful signing attempt, SideLoader's persistent guard continues blocking unattended and manual retries until explicitly resumed. The Activity log includes the actual Apple Account passed to AltServer. Avoid repeated attempts; verify the account in a browser and inspect the anisette configuration before intentionally resuming.

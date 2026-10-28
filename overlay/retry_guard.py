@@ -59,6 +59,10 @@ def _classify(output, rc):
     if "-20209" in text or "locked for security reasons" in text:
         return ("-20209", "account_locked", "Apple reports this account is locked.",
                 "Unlock the account at iforgot.apple.com or replace it in Step 2; then explicitly resume.")
+    if "-36607" in text or "unable to sign you in to your apple account. try again later" in text:
+        return ("-36607", "apple_authentication_unavailable",
+                "AltServer could not complete Apple Account sign-in (-36607). The reason is not confirmed; it may involve Apple's authentication service or anisette.",
+                "Do not retry in a loop. Confirm the account works at account.apple.com, inspect the configured anisette service, and review Copy Diagnostics. Resume manually only after checking the cause.")
     if "-80046" in text:
         return ("-80046", "signing_failure", "AltServer failed with -80046 after contacting Apple; the exact cause is not established.",
                 "Review Copy Diagnostics and signing backend compatibility before explicitly resuming.")
