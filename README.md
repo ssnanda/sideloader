@@ -27,16 +27,22 @@ All three scripts accept **no arguments**; defaults match the Siftidy workflow. 
 3. Open `http://localhost:38080` on the server. Set a strong dashboard password **before** entering any Apple ID credentials.
 4. Connect iPhone to Ubuntu by USB, tap **Trust**, follow the dashboard pairing instructions, add the phone and use a dedicated Apple ID with 2FA.
 5. Browse to `http://SERVER-IP:38080/sources`; paste a published AltStore source JSON URL, such as `https://example.com/altstore.json` (HTTPS by default). Click Install on up to three apps.
-6. Once you have a successful first install, unplug the phone and check Wi-Fi discovery and refresh. In Settings, leave **automatic check** enabled, with **renew 2 days before expiry** (default). The dashboard checks actual installed apps rather than treating cached profile expiry as proof of installation.
+6. Once you have a successful first install, unplug the phone and check Wi-Fi discovery and refresh. In **Step 4: Automatic renewal**, leave **automatic check** enabled, with **renew 2 days before expiry** (default). The dashboard checks actual installed apps rather than treating cached profile expiry as proof of installation.
 
 ## First install on macOS
 
-1. Install Docker Desktop **4.34+**, `git`, `python3`, and `socat` (`brew install socat`).
+1. Install Docker Desktop **4.34+**, `git`, and `python3`; SideLoader's built-in Python USB relay does not require `socat` or Homebrew.
 2. In Docker Desktop, open **Settings → Resources → Network → Enable host networking** and restart Docker Desktop. Enable Docker Desktop launch at login; keep your Mac awake while you expect renewals.
-3. Clone the repository and run `./bin/build-docker.sh`. It installs a per-user LaunchAgent to forward macOS `usbmuxd` securely from `127.0.0.1:27015` into the Docker host networking stack.
+3. Clone the repository and run `./bin/build-docker.sh`. It installs a Python USB relay LaunchAgent to forward macOS `usbmuxd` securely from `127.0.0.1:27015` into the Docker host networking stack.
 4. Connect iPhone to your Mac over USB. Trust the Mac and in Finder turn on **Show this iPhone when on Wi-Fi**. Then follow the same dashboard and Sources steps above.
 
 macOS Docker Desktop host networking works at TCP/UDP level; it is **not** full layer-2 access to the Mac's LAN. Initial pairing and Wi-Fi discovery on your specific iOS version must be verified.
+
+## Simplified phone-friendly dashboard
+
+The bottom navigation now has just **Apps**, **Sources** and **Activity**. There is no floating Sources shortcut or separate Settings tab. The Apps page has numbered setup steps: **Step 1: Connect your iPhone**, **Step 2: Apple Account**, **Step 3: Add and install an app**, and **Step 4: Automatic renewal**. The first incomplete step opens automatically; completed steps collapse into one-line summaries (including the device name and connection status), and can be expanded again for editing. The Activity tab contains **Copy Diagnostics**, avoiding a floating button over the iPhone's screen.
+
+On phones, both dashboard and Sources use responsive controls, keyboard-friendly 16px inputs, accessible 44px touch targets, and navigation that respects the safe area/home indicator. Local rebuilds preserve your ignored `build/sideloop/data/` and do not use GitHub Actions.
 
 ## What “AltStore JSON source” means here
 
@@ -76,7 +82,7 @@ SideLoader's own added files are distributed under MIT (see `LICENSE`), and use 
 - Rebuilds from the maintained `jaakkopalvaila/AltServer-Linux` `ng` branch at the verified revision `5c32531fe0eb6ff87ed8f7b137da803c91945a02` and retains Sideloop's profile-preservation and chunked-write patches. If the `ng` branch advances, the build intentionally refuses to switch to an unreviewed commit. Review the upstream changes and update the expected revision in `overlay/patch-v2.py` before rebuilding.
 - Defaults to `https://mac-ani.jkcoxson.com` for Mac-compatible anisette metadata. This is a **third-party service**: it sees your IP and requests for anisette headers, but no Apple ID password or 2FA code is sent directly to it by this application. Use `SIDELOADER_ANISETTE_SERVER` in `build/sideloop/.env` to choose another compatible server if you prefer. The bundled Android anisette service is still present but no longer the signing default. Repeated -80046 retries can lock an Apple ID; don't continuously force sign-in.
 - Uses `ideviceinstaller` inside the Docker image to check the phone's actual installed applications. A stale provisioning profile no longer reports a missing IPA as installed. A failed inventory probe reports **Unknown**, not **Missing**, and offline devices report **Offline**. A successful AltServer exit only records a successful refresh when an actual installed-app check passes.
-- Adds a **Copy Diagnostics** button to the dashboard. On secure origins (`localhost` / HTTPS), clicking copies a sanitized report; browsers restricting clipboard access on LAN HTTP show a selectable text box instead. Reports redact account credentials, 2FA codes, device IDs and IPs; still review the output before sharing. The last 250 signing log lines and the most recent job are included.
+- Adds a **Copy Diagnostics** action under the Activity tab. On secure origins (`localhost` / HTTPS), clicking copies a sanitized report; browsers restricting clipboard access on LAN HTTP show a selectable text box instead. Reports redact account credentials, 2FA codes, device IDs and IPs; still review the output before sharing. The last 250 signing log lines and the most recent job are included.
 - Existing app data, IPA cache and pairing state stay in ignored `build/sideloop/data/`. No GitHub Actions builds are involved.
 
 ### Apply update

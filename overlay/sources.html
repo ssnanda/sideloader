@@ -1,7 +1,44 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>MiniSideload Sources</title>
-<style>body{font:16px/1.45 system-ui,-apple-system,sans-serif;margin:0;background:Canvas;color:CanvasText}main{max-width:760px;margin:0 auto;padding:24px 18px 70px}a{color:#087cf2}h1{margin:0 0 5px}p{color:GrayText}form{display:flex;gap:8px;margin:20px 0}input{flex:1;min-width:0;padding:12px;border:1px solid #8887;border-radius:8px;background:Canvas;color:CanvasText}button{padding:9px 15px;border:0;border-radius:9px;background:#087cf2;color:white;cursor:pointer;font-weight:600}button:disabled{opacity:.4}button.remove{background:transparent;color:#d35}section{padding:16px;margin:13px 0;border:1px solid #8884;border-radius:12px}.heading{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.app{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #8883}.app small{display:block;color:GrayText;overflow-wrap:anywhere}.status{padding:10px;border-radius:8px;background:ButtonFace;min-height:20px}code{overflow-wrap:anywhere}label{display:block}header{display:flex;align-items:center;justify-content:space-between;gap:16px}@media(max-width:450px){form{flex-direction:column}.app{align-items:start}.app button{flex-shrink:0}}</style>
-</head><body><main><header><h1>Sources</h1><a href="/">← Dashboard</a></header><p>Paste an existing AltStore / SideStore Classic JSON source URL. IPA downloads stay at their existing hosted locations. The first import saves a copy for future Wi-Fi refreshes.</p>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>SideLoader · Sources</title>
+<style>body{font:16px/1.45 system-ui,-apple-system,sans-serif;margin:0;background:Canvas;color:CanvasText}main{max-width:760px;margin:0 auto;padding:24px 18px 70px}a{color:#087cf2}h1{margin:0 0 5px}p{color:GrayText}form{display:flex;gap:8px;margin:20px 0}input{flex:1;min-width:0;padding:12px;border:1px solid #8887;border-radius:8px;background:Canvas;color:CanvasText}button{padding:9px 15px;border:0;border-radius:9px;background:#087cf2;color:white;cursor:pointer;font-weight:600}button:disabled{opacity:.4}button.remove{background:transparent;color:#d35}section{padding:16px;margin:13px 0;border:1px solid #8884;border-radius:12px}.heading{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.app{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #8883}.app small{display:block;color:GrayText;overflow-wrap:anywhere}.status{padding:10px;border-radius:8px;background:ButtonFace;min-height:20px}code{overflow-wrap:anywhere}label{display:block}header{display:flex;align-items:center;justify-content:space-between;gap:16px}@media(max-width:450px){form{flex-direction:column}.app{align-items:start}.app button{flex-shrink:0}}
+/* SideLoader mobile navigation and touch-first source cards */
+*{box-sizing:border-box}
+html{scroll-padding-bottom:calc(95px + env(safe-area-inset-bottom));-webkit-text-size-adjust:100%}
+body{padding-bottom:calc(50px + env(safe-area-inset-bottom));overflow-x:hidden}
+main{max-width:680px;padding-bottom:calc(85px + env(safe-area-inset-bottom))}
+header{min-height:44px}
+section{min-width:0;overflow-wrap:anywhere}
+section>small{display:block;overflow-wrap:anywhere;margin-top:4px;color:GrayText;font-size:12px}
+.app>div{min-width:0;flex:1}
+.app strong{display:block;overflow-wrap:anywhere}
+.app button,.heading button,form button{min-height:44px;touch-action:manipulation}
+.heading>strong{min-width:0;flex:1;overflow-wrap:anywhere}
+.status{line-height:1.4;overflow-wrap:anywhere}
+.sources-tabs{position:fixed;z-index:20;left:0;right:0;bottom:0;display:flex;align-items:stretch;justify-content:center;min-height:56px;padding-bottom:max(env(safe-area-inset-bottom),4px);background:color-mix(in srgb,Canvas 88%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 -1px 0 #8884}
+.sources-tabs a{display:flex;align-items:center;justify-content:center;flex:1;min-height:52px;max-width:220px;text-align:center;text-decoration:none;color:GrayText;font-size:13px;font-weight:600;touch-action:manipulation}
+.sources-tabs a[aria-current=page]{color:#087cf2}
+.sources-tabs a:focus-visible{outline:2px solid #087cf2;outline-offset:-4px}
+input{font-size:16px}
+@media(max-width:540px){
+  main{padding:calc(15px + env(safe-area-inset-top)) 12px calc(80px + env(safe-area-inset-bottom))}
+  h1{font-size:29px}
+  form{flex-direction:column;gap:10px}
+  form button{width:100%}
+  section{padding:13px;margin:10px 0}
+  .heading{align-items:flex-start}
+  .app{gap:8px;padding:12px 0;align-items:flex-start}
+  .app button{padding:10px 12px;min-width:80px}
+  .sources-tabs{padding-bottom:max(env(safe-area-inset-bottom),4px)}
+  .sources-tabs a{font-size:14px}
+}
+@media(max-width:350px){.app{flex-wrap:wrap}.app button{margin-left:auto}}
+</style>
+</head><body><main><header><h1>Sources</h1></header><p>Paste an existing AltStore / SideStore Classic JSON source URL. IPA downloads stay at their existing hosted locations. The first import saves a copy for future Wi-Fi refreshes.</p>
 <form id="add"><input id="url" type="url" placeholder="https://example.com/apps.json" required aria-label="AltStore source URL"><button>Add source</button></form><div id="status" class="status" role="status">Loading sources…</div><div id="sources"></div><p>Up to three installed apps per free Apple account. New versions from source require selecting Update; existing installed copies are automatically renewed by Sideloop. <a href="/">Manage devices and renewal settings</a>.</p></main>
+<nav class="sources-tabs" aria-label="Primary navigation">
+  <a href="/#apps">Apps</a>
+  <a href="/sources" aria-current="page">Sources</a>
+  <a href="/#activity">Activity</a>
+</nav>
 <script>
 const $=id=>document.getElementById(id);
 let busy=false;

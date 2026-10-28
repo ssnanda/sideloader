@@ -43,12 +43,5 @@ else:
 for f, dest in (("sources.py", "sources.py"), ("sources.html", "sources.html")):
     (repo / "sideloop" / dest).write_bytes((starter / f).read_bytes())
 
-# Add a link to Sources without disturbing native Sideloop JavaScript.
-index = repo / "sideloop" / "index.html"
-page = index.read_text()
-if 'id="minisideload-link"' not in page:
-    anchor = "</body>"
-    if page.count(anchor) != 1:
-        sys.exit("Sideloop index.html changed: cannot place Sources link")
-    addition = '<a id="minisideload-link" href="/sources" style="position:fixed;z-index:12;right:10px;bottom:calc(65px + env(safe-area-inset-bottom));background:#007aff;color:white;padding:8px 13px;border-radius:18px;font:600 13px system-ui;text-decoration:none;box-shadow:0 2px 10px #0004">Sources</a>\n'
-    index.write_text(page.replace(anchor, addition + anchor))
+# Navigation is installed by patch-navigation.py after the v2 overlay.
+# Existing floating shortcuts are removed there on every build.
