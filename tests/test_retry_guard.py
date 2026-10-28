@@ -86,6 +86,16 @@ class RetryGuardTests(unittest.TestCase):
         guard.resume()
         self.assertFalse(guard.status()["blocked"])
 
+    def test_app_specific_password_rejected_22406_and_blocks_retries(self):
+        token = guard.begin()
+        status = guard.failed("Enter the correct password for this Apple Account. (-22406)", 1, token)
+        self.assertTrue(status["blocked"])
+        self.assertEqual(status["code"], "-22406")
+        self.assertEqual(status["reason"], "password_rejected")
+        self.assertIn("app-specific password", status["message"])
+        with self.assertRaises(RuntimeError):
+            guard.begin()
+
     def test_36607_no_lock_inference(self):
         token = guard.begin()
         state = guard.failed("Unable to sign you in to your Apple Account. Try again later. (-36607)", 1, token)

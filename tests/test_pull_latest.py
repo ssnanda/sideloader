@@ -63,7 +63,10 @@ class PullVersionTests(unittest.TestCase):
         self.assertIn('Local SideLoader:  0.2.0+1', out)
         self.assertIn('GitHub SideLoader: 0.2.0+1', out)
         self.assertIn('SIDELOADER VERSION COMPARISON (after update)', out)
-        self.assertIn('already current', out)
+        self.assertIn('ALREADY ON LATEST VERSION — SIDELOADER 0.2.0+1', out)
+        self.assertIn('NO UPDATE NEEDED', out)
+        self.assertNotIn('UPDATING SIDELOADER', out)
+        self.assertNotIn('Preserving local uncommitted changes', out)
         self.assertEqual((self.local / 'build' / 'pairing').read_text(), 'DO NOT DELETE')
 
     def test_remote_version_and_changes(self):
@@ -74,6 +77,10 @@ class PullVersionTests(unittest.TestCase):
         self.assertIn('SIDELOADER VERSION COMPARISON (after update)', out)
         self.assertIn('Local SideLoader:  0.2.0+2', out)
         self.assertIn('Changes applied:', out)
+        self.assertIn('UPDATE AVAILABLE — GITHUB 0.2.0+2', out)
+        self.assertIn('UPDATING SIDELOADER', out)
+        self.assertIn('UPDATE COMPLETE — SIDELOADER 0.2.0+2', out)
+        self.assertIn('DOCKER IMAGE NOT MODIFIED', out)
         self.assertEqual((self.local / 'VERSION').read_text(), '0.2.0+2\n')
         self.assertEqual((self.local / 'build' / 'pairing').read_text(), 'DO NOT DELETE')
 
@@ -82,6 +89,7 @@ class PullVersionTests(unittest.TestCase):
         out = self.pull()
         self.assertIn('Updater script changed during pull', out)
         self.assertIn('CURRENT VERSIONS (updated updater)', out)
+        self.assertIn('UPDATE COMPLETE — SIDELOADER 0.2.0+3', out)
         self.assertIn('Local SideLoader:  0.2.0+3', out)
         self.assertIn('GitHub SideLoader: 0.2.0+3', out)
         self.assertEqual((self.local / 'build' / 'pairing').read_text(), 'DO NOT DELETE')
@@ -94,6 +102,8 @@ class PullVersionTests(unittest.TestCase):
         (self.local / 'scratch.txt').write_text('Uncommitted change\n')
         out = self.pull()
         self.assertIn('Local-only commits retained', out)
+        self.assertIn('UPDATING SIDELOADER', out)
+        self.assertIn('LOCAL COMMITS PRESERVED', out)
         self.assertEqual((self.local / 'feature.txt').read_text(), 'Codex change\n')
         self.assertEqual((self.local / 'scratch.txt').read_text(), 'Uncommitted change\n')
         self.assertEqual((self.local / 'VERSION').read_text(), '0.2.0+2\n')
@@ -105,11 +115,40 @@ class PullVersionTests(unittest.TestCase):
         self.assertNotIn('Fetching latest version', out)
         self.assertEqual(git('status', '--porcelain', cwd=self.local), '')
 
+    def test_second_check_after_update_explicitly_says_latest(self):
+        self.advance_remote('0.2.0+2')
+        first = self.pull()
+        self.assertIn('UPDATE COMPLETE', first)
+        second = self.pull()
+        self.assertIn('ALREADY ON LATEST VERSION — SIDELOADER 0.2.0+2', second)
+        self.assertNotIn('UPDATING SIDELOADER', second)
+        self.assertNotIn('Changes applied:', second)
+
+    def test_no_remote_changes_does_not_touch_local_worktree(self):
+        (self.local / 'scratch.txt').write_text('Keep untouched')
+        out = self.pull()
+        self.assertIn('ALREADY ON LATEST VERSION', out)
+        self.assertIn('Local uncommitted changes preserved', out)
+        self.assertEqual((self.local / 'scratch.txt').read_text(), 'Keep untouched')
+        self.assertEqual(git('stash', 'list', cwd=self.local), '')
+
+    def test_remote_contained_by_local_commit_is_not_an_update(self):
+        (self.local / 'feature.txt').write_text('Local-only change')
+        git('add', 'feature.txt', cwd=self.local)
+        git('-c', 'user.name=Dev', '-c', 'user.email=dev@example.com',
+            'commit', '-qm', 'local-only', cwd=self.local)
+        out = self.pull()
+        self.assertIn('LATEST GITHUB VERSION ALREADY INCLUDED', out)
+        self.assertIn('Local-only commits: 1', out)
+        self.assertNotIn('UPDATING SIDELOADER', out)
+        self.assertEqual((self.local / 'feature.txt').read_text(), 'Local-only change')
+
     def test_force_requires_explicit_flag_and_preserves_ignored_data(self):
         self.advance_remote('0.2.0+2')
         (self.local / 'scratch.txt').write_text('delete with force')
         out = self.pull('--force')
         self.assertIn('FORCE MODE', out)
+        self.assertIn('FORCE RESET IN PROGRESS', out)
         self.assertFalse((self.local / 'scratch.txt').exists())
         self.assertEqual((self.local / 'build' / 'pairing').read_text(), 'DO NOT DELETE')
 

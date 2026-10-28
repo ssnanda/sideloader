@@ -65,6 +65,18 @@ print_comparison() {
   printf '  Local SideLoader:  %-16s (%s)\n' "$local_ver" "$local_sha"
   printf '  GitHub SideLoader: %-16s (%s)\n' "$github_ver" "$github_sha"
 }
+status_banner() {
+  # Readable in logs, bold in interactive macOS/Linux terminals. No colors
+  # required, and NO_COLOR disables terminal control sequences.
+  local label="$1" rule="===================================================================="
+  printf '\n%s\n' "$rule"
+  if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[1m  %s\033[0m\n' "$label"
+  else
+    printf '  %s\n' "$label"
+  fi
+  printf '%s\n' "$rule"
+}
 
 if [[ "$REPORT_ONLY" == true ]]; then
   # No fetch, stash, checkout or other mutations. This is also used when the
@@ -78,7 +90,12 @@ if [[ "$REPORT_ONLY" == true ]]; then
     remote_sha="unknown"; remote_ver="unknown"
   fi
   print_comparison 'CURRENT VERSIONS (updated updater)' "$(version_from_file)" "$local_sha" "$remote_ver" "$remote_sha"
-  echo 'Docker is unchanged until you run ./bin/build-docker.sh.'
+  if [[ "$(git rev-parse HEAD)" == "$(git rev-parse "$remote_ref" 2>/dev/null || echo unknown)" ]]; then
+    status_banner "UPDATE COMPLETE — SIDELOADER $(version_from_file) — LATEST ON GITHUB"
+  else
+    status_banner "UPDATE COMPLETE — GITHUB SYNCED; LOCAL COMMITS RETAINED"
+  fi
+  echo 'SOURCE UPDATED. DOCKER IMAGE NOT MODIFIED. Run ./bin/build-docker.sh to deploy.'
   exit 0
 fi
 
@@ -104,6 +121,54 @@ if [[ "$OLD_VERSION" != "$OLD_COMMIT_VERSION" ]]; then
   printf ' Note: local VERSION file differs from committed version %s.\n' "$OLD_COMMIT_VERSION"
 fi
 
+status_banner "CHECKING GITHUB FOR SIDELOADER UPDATES"
+echo "Fetching latest version from origin/$BRANCH..."
+if ! git fetch origin "$BRANCH"; then
+  status_banner "UPDATE CHECK FAILED — LOCAL CODE UNCHANGED"
+  echo 'Could not fetch GitHub. No local commits were replaced.' >&2
+  exit 1
+fi
+REMOTE_HEAD="$(git rev-parse FETCH_HEAD)"
+REMOTE_SHA="$(short_rev FETCH_HEAD)"
+REMOTE_VERSION="$(version_at FETCH_HEAD)"
+print_comparison 'SIDELOADER VERSION COMPARISON (before update)' "$OLD_VERSION" "$OLD_SHA" "$REMOTE_VERSION" "$REMOTE_SHA"
+
+# A matching commit or an existing descendant is already synchronized with
+# GitHub. Do not rebase, stash, or imply an update is being performed.
+if [[ "$FORCE" == false ]]; then
+  if [[ "$OLD_HEAD" == "$REMOTE_HEAD" ]]; then
+    printf 'No GitHub update is needed. Local files and Docker are untouched.\n'
+    if [[ "$OLD_VERSION" != "$REMOTE_VERSION" ]]; then
+      printf 'NOTE: local VERSION file has edits; GitHub commit is current.\n'
+    fi
+    print_comparison 'SIDELOADER VERSION COMPARISON (after check)' "$OLD_VERSION" "$OLD_SHA" "$REMOTE_VERSION" "$REMOTE_SHA"
+    if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+      echo 'Local uncommitted changes preserved:'
+      git status --short
+    fi
+    status_banner "ALREADY ON LATEST VERSION — SIDELOADER $REMOTE_VERSION"
+    echo 'Docker is unchanged by this check.'
+    exit 0
+  elif git merge-base --is-ancestor "$REMOTE_HEAD" "$OLD_HEAD"; then
+    printf 'NO UPDATE NEEDED. Current local HEAD already contains the latest GitHub commit.\n'
+    print_comparison 'SIDELOADER VERSION COMPARISON (after check)' "$OLD_VERSION" "$OLD_SHA" "$REMOTE_VERSION" "$REMOTE_SHA"
+    printf 'Local-only commits: %s\n' "$(git rev-list --count "$REMOTE_HEAD"..HEAD)"
+    if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+      echo 'Uncommitted local edits retained:'
+      git status --short
+    fi
+    status_banner "LATEST GITHUB VERSION ALREADY INCLUDED — LOCAL COMMITS RETAINED"
+    echo 'Docker is unchanged by this check.'
+    exit 0
+  fi
+fi
+
+if [[ "$FORCE" == true ]]; then
+  status_banner "FORCE RESET REQUESTED — REPLACING LOCAL SOURCE WITH GITHUB $REMOTE_VERSION"
+else
+  status_banner "UPDATE AVAILABLE — GITHUB $REMOTE_VERSION (LOCAL $OLD_VERSION)"
+  printf 'Local commits and edits will be preserved.\n'
+fi
 STASHED=false
 if [[ "$FORCE" == false && -n "$(git status --porcelain --untracked-files=normal)" ]]; then
   echo 'Preserving local uncommitted changes and untracked files...'
@@ -117,24 +182,16 @@ if [[ "$FORCE" == false && -n "$(git status --porcelain --untracked-files=normal
   STASHED=true
 fi
 
-echo "Fetching latest version from origin/$BRANCH..."
-if ! git fetch origin "$BRANCH"; then
-  echo 'Could not fetch GitHub. No local commits were replaced.' >&2
-  if [[ "$STASHED" == true ]]; then git stash pop --index || true; fi
-  exit 1
-fi
-REMOTE_HEAD="$(git rev-parse FETCH_HEAD)"
-REMOTE_SHA="$(short_rev FETCH_HEAD)"
-REMOTE_VERSION="$(version_at FETCH_HEAD)"
-print_comparison 'SIDELOADER VERSION COMPARISON (before update)' "$OLD_VERSION" "$OLD_SHA" "$REMOTE_VERSION" "$REMOTE_SHA"
-
 if [[ "$FORCE" == true ]]; then
+  status_banner "FORCE RESET IN PROGRESS — REPLACING LOCAL SOURCE"
   echo "FORCE MODE: replacing local commits and tracked/untracked edits with origin/$BRANCH..."
   git reset --hard FETCH_HEAD
   git clean -fd  # Never -x: ignored build/ and local private runtime data are preserved.
 else
+  status_banner "UPDATING SIDELOADER — PLEASE DO NOT INTERRUPT"
   echo 'Updating from GitHub while preserving local commits...'
   if ! git -c rebase.autoStash=false rebase FETCH_HEAD; then
+    status_banner "UPDATE FAILED — REBASE CONFLICT"
     echo 'Rebase failed. Attempting to restore the pre-pull state.' >&2
     git rebase --abort >/dev/null 2>&1 || true
     if [[ "$STASHED" == true ]]; then
@@ -145,6 +202,7 @@ else
   if [[ "$STASHED" == true ]]; then
     echo 'Restoring uncommitted local changes...'
     if ! git stash pop --index; then
+      status_banner "UPDATE INCOMPLETE — LOCAL EDITS NEED ATTENTION"
       echo 'Code synchronized, but restoring edits conflicted. The stash remains available.' >&2
       exit 1
     fi
@@ -168,8 +226,13 @@ if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
   echo 'Uncommitted local edits retained:'
   git status --short
 fi
-printf '\nUpdate finished. Docker has NOT been rebuilt yet.\n'
-printf '  Next: ./bin/build-docker.sh\n'
+if [[ "$LOCAL_HEAD" == "$REMOTE_HEAD" ]]; then
+  status_banner "UPDATE COMPLETE — SIDELOADER $LOCAL_VERSION — LATEST ON GITHUB"
+else
+  status_banner "UPDATE COMPLETE — GITHUB SYNCED; LOCAL COMMITS PRESERVED"
+fi
+printf 'SOURCE UPDATED. DOCKER IMAGE NOT MODIFIED.\n'
+printf 'Next step: ./bin/build-docker.sh\n'
 
 # A pull can replace the script currently running. Bash keeps executing the
 # old script in memory, so explicitly use the new one for the final report.
