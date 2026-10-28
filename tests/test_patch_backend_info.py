@@ -73,6 +73,61 @@ class PatchTests(unittest.TestCase):
             subprocess.run(cmd,check=True,capture_output=True,text=True)
             self.assertEqual(once,{name:(checkout/name).read_text() for name in templates})
 
+    def test_rebuild_after_responsive_layout_keeps_links_and_version_controls(self):
+        """Regression: responsive patch moved ${version} into a named span."""
+        with tempfile.TemporaryDirectory() as temp:
+            checkout = Path(temp)
+            (checkout/'sideloop').mkdir()
+            (checkout/'scripts').mkdir()
+            templates = {
+                'Dockerfile': DOCKER,
+                'sideloop/server.py': SERVER,
+                'sideloop/index.html': INDEX.replace(
+                    '<html><script>', '<html><head><style>.page{max-width:680px}</style></head><script>'),
+                'scripts/refresh.sh': REFRESH,
+            }
+            for name, contents in templates.items():
+                (checkout/name).write_text(contents)
+            patch = [sys.executable, str(PATCH), temp, str(ROOT/'overlay')]
+            responsive = [sys.executable,
+                          str(ROOT/'overlay'/'patch-responsive-ui.py'), temp]
+            subprocess.run(patch, check=True, capture_output=True, text=True)
+            subprocess.run(responsive, check=True, capture_output=True, text=True)
+            page = checkout/'sideloop'/'index.html'
+            before = page.read_text()
+            self.assertIn('<span class="sideloader-backend-version">${version}</span>', before)
+            self.assertIn('GitHub source</a>', before)
+            self.assertIn('Recent commits</a>', before)
+            for _ in range(2):
+                rebuilt = subprocess.run(patch, capture_output=True, text=True)
+                self.assertEqual(rebuilt.returncode, 0, rebuilt.stdout + rebuilt.stderr)
+                self.assertIn('already installed', rebuilt.stdout)
+                self.assertEqual(page.read_text(), before)
+            self.assertEqual(before.count('GitHub source</a>'), 1)
+            self.assertEqual(before.count('Recent commits</a>'), 1)
+            self.assertEqual(before.count('id="sideloader-altserver-updates"'), 1)
+
+    def test_partial_upstream_links_abort_without_duplicating_controls(self):
+        with tempfile.TemporaryDirectory() as temp:
+            checkout = Path(temp)
+            (checkout/'sideloop').mkdir()
+            (checkout/'scripts').mkdir()
+            templates = {
+                'Dockerfile': DOCKER, 'sideloop/server.py': SERVER,
+                'sideloop/index.html': INDEX, 'scripts/refresh.sh': REFRESH,
+            }
+            for name, contents in templates.items():
+                (checkout/name).write_text(contents)
+            cmd = [sys.executable, str(PATCH), temp, str(ROOT/'overlay')]
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            page = checkout/'sideloop'/'index.html'
+            modified = page.read_text().replace('GitHub source</a>', 'Missing source</a>')
+            page.write_text(modified)
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('partially installed', result.stderr)
+            self.assertEqual(page.read_text(), modified)
+
     def test_changed_dockerfile_fails_safe(self):
         with tempfile.TemporaryDirectory() as temp:
             checkout=Path(temp)

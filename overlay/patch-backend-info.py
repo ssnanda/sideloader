@@ -133,16 +133,33 @@ replace(index,
   on("sideloader-remove-account", "onclick",''',
         'on("sideloader-altserver-updates", "onclick"')
 
-# Prominent links beside the actual running version, including upstream history.
-# This executes on both a first build and previously-patched local checkouts.
-replace(index,
-        '<span>${version}</span><button type="button" class="cap" id="sideloader-altserver-updates"',
-        '<span>${version}</span>'
-        '<a class="cap" href="https://github.com/jaakkopalvaila/AltServer-Linux/tree/ng" '
-        'target="_blank" rel="noopener noreferrer" aria-label="Open maintained AltServer-Linux NG source on GitHub">GitHub source</a>'
-        '<a class="cap" href="https://github.com/jaakkopalvaila/AltServer-Linux/commits/ng" '
-        'target="_blank" rel="noopener noreferrer" aria-label="View recent AltServer-Linux NG commits">Recent commits</a>'
-        '<button type="button" class="cap" id="sideloader-altserver-updates"',
-        "prominent upstream repository and commit links")
+# Prominent links beside the installed AltServer version. The responsive
+# overlay wraps the version in a new element, so a future build must NOT
+# expect its old <span>${version}</span> anchor.
+# Detect a complete installation first, rejecting partial/ambiguous markup.
+source = index.read_text()
+source_link = 'aria-label="Open maintained AltServer-Linux NG source on GitHub">GitHub source</a>'
+commits_link = 'aria-label="View recent AltServer-Linux NG commits">Recent commits</a>'
+count_source = source.count(source_link)
+count_commits = source.count(commits_link)
+if count_source == 1 and count_commits == 1:
+    if (source.count('id="sideloader-altserver-updates"') != 1 or
+            not any(version in source for version in (
+                '<span>${version}</span>',
+                '<span class="sideloader-backend-version">${version}</span>'))):
+        sys.exit("AltServer upstream links exist but version/update controls are inconsistent")
+    print("AltServer upstream links already installed; preserving responsive layout.")
+elif count_source or count_commits:
+    sys.exit("AltServer upstream links are partially installed; refusing to duplicate them")
+else:
+    replace(index,
+            '<span>${version}</span><button type="button" class="cap" id="sideloader-altserver-updates"',
+            '<span>${version}</span>'
+            '<a class="cap" href="https://github.com/jaakkopalvaila/AltServer-Linux/tree/ng" '
+            'target="_blank" rel="noopener noreferrer" aria-label="Open maintained AltServer-Linux NG source on GitHub">GitHub source</a>'
+            '<a class="cap" href="https://github.com/jaakkopalvaila/AltServer-Linux/commits/ng" '
+            'target="_blank" rel="noopener noreferrer" aria-label="View recent AltServer-Linux NG commits">Recent commits</a>'
+            '<button type="button" class="cap" id="sideloader-altserver-updates"',
+            "prominent upstream repository and commit links")
 
 print("Pinned AltServer-Linux NG provenance and safe manual GitHub update checks exposed in Apps UI.")
