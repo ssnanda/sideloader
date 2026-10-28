@@ -5,6 +5,7 @@ Run after navigation, device health, Apple verification and signing-guard patche
 Supports already-patched local upstream checkouts and preserves stored data.
 """
 from pathlib import Path
+import re
 import sys
 
 if len(sys.argv) != 2:
@@ -128,12 +129,19 @@ old_list = '  ${devs.map(section).join("")}'
 start = source.find(old_list, view_start, view_end)
 if start < 0:
     sys.exit("Cannot safely locate duplicate install list")
-end = source.find('  </div>`;', start, view_end)
-if end < 0:
+# The navigation overlay moves the final closing backtick onto its own line.
+# Both old `</div>`; ` and new `</div>\n  `; ` are legitimate. Anchor to
+# the actual *outer* section closure, not a nested template literal.
+tail = source[start:view_end]
+closing = re.search(r'(?m)^  </div>[ \t]*\n?[ \t]*`;', tail)
+if closing is None:
     sys.exit("Cannot safely locate duplicate install controls")
-end += len('  </div>`;')
+end = start + closing.end()
 removed = source[start:end]
-if 'id="recheck"' not in removed or 'data-go="settings"' not in removed:
+# Navigation also rewrites Add App or Device from data-go to data-step-open.
+if ('id="recheck"' not in removed or
+        not any(action in removed for action in ('data-step-open="3"', 'data-go="settings"')) or
+        '<div class="sect">' not in removed):
     sys.exit("Unexpected install controls; refusing to remove")
 source = source[:start] + '  `;' + source[end:]
 

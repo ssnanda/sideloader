@@ -20,3 +20,8 @@ The Apps page displays **Sideloop core** separately from AltServer-Linux: the Si
 ## Pull script version report (v0.2.0+17)
 
 `./bin/pull-latest.sh` always prints the local SideLoader version before contacting GitHub, then shows local/GitHub versions and commit IDs before and after synchronizing. It also reports changed files, preserves local commits/edits and ignored build data, and does not rebuild Docker or push to GitHub. If the updater script itself changes, it invokes the new version in read-only report mode to show the updated version immediately without another Git fetch or pull. `--force` remains explicitly destructive and never deletes ignored `build/` data.
+
+
+## Existing-checkout installation workflow migration (v0.2.0+18)
+
+`./bin/build-docker.sh` can be run repeatedly against the existing ignored `build/sideloop/` checkout. The Step 4 Install migration recognizes both the old dashboard's immediate closing template tag and the newer navigation overlay's separate closing line. It also recognizes the navigation overlay's `data-step-open="3"` control instead of expecting only `data-go="settings"`. Both layouts are validated before removing the duplicate install controls. If an unknown dashboard layout is encountered, the patch stops without writing a partially migrated index page. This fixes `Cannot safely locate duplicate install controls` without deleting IPAs, account information, pairing, or other runtime data. Four targeted regression tests cover both markup variants, repeat builds, JavaScript syntax, and safety checks.

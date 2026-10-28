@@ -70,6 +70,42 @@ class T(unittest.TestCase):
    self.assertEqual(s,f.read_text())
    js=subprocess.run(['node','--check'],input='"use strict";\n'+s,capture_output=True,text=True)
    self.assertEqual(js.returncode,0,js.stderr)
+ def test_existing_navigation_patch_with_separate_closing_line(self):
+  # This matches actual patch-navigation.py after it removes the duplicate
+  # automatic-renewal panel and rewrites data-go to data-step-open.
+  with tempfile.TemporaryDirectory() as tmp:
+   folder=pathlib.Path(tmp)/'sideloop';folder.mkdir()
+   f=folder/'index.html'
+   old='  </div>`;'
+   self.assertEqual(PRE.count(old),1)
+   dashboard=PRE.replace(old,'  </div>\n  `;',1).replace('data-go="settings"','data-step-open="3"')
+   f.write_text(dashboard)
+   cmd=[sys.executable,str(SCRIPT),tmp]
+   one=subprocess.run(cmd,capture_output=True,text=True)
+   self.assertEqual(one.returncode,0,one.stdout+one.stderr)
+   updated=f.read_text()
+   self.assertIn('renderSetupStep(4, "Install on iPhone"',updated)
+   self.assertNotIn('devs.map(section).join("")',updated)
+   self.assertEqual(updated.count('id="recheck"'),1)
+   self.assertIn('SETTINGS · OPTIONAL',updated)
+   self.assertIn('data-sign="${esc(a.id)}"',updated)
+   js=subprocess.run(['node','--check'],input='"use strict";\n'+updated,capture_output=True,text=True)
+   self.assertEqual(js.returncode,0,js.stderr)
+   second=subprocess.run(cmd,capture_output=True,text=True)
+   self.assertEqual(second.returncode,0,second.stdout+second.stderr)
+   self.assertEqual(f.read_text(),updated)
+
+ def test_refuses_to_remove_unknown_existing_actions(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   folder=pathlib.Path(tmp)/'sideloop';folder.mkdir()
+   f=folder/'index.html'
+   invalid=PRE.replace('id="recheck"','id="something-else"')
+   f.write_text(invalid)
+   run=subprocess.run([sys.executable,str(SCRIPT),tmp],capture_output=True,text=True)
+   self.assertNotEqual(run.returncode,0)
+   self.assertIn('Unexpected install controls',run.stderr)
+   self.assertEqual(f.read_text(),invalid)
+
  def test_fails_closed_on_unknown_dashboard(self):
   with tempfile.TemporaryDirectory() as tmp:
    p=pathlib.Path(tmp)/'sideloop';p.mkdir();(p/'index.html').write_text('unknown')
