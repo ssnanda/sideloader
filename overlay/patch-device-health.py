@@ -63,10 +63,13 @@ replace(index,
         'const devState = d => !d.live ? ["", "Away"] : d.live.reachable ? ["ok", "Connected"] : ["warn", "Locked"];',
         'const devState = d => !S.last_checked || S.now - S.last_checked > 120 ? ["", "Status unverified"] : !d.live ? ["", "Away"] : d.live.reachable ? ["ok", "Connected"] : ["warn", "Locked"];',
         "app card freshness")
-replace(index,
-        'appleDone ? "Account details saved" : "Enter account and password"',
-        'appleDone ? "Credentials saved · not verified with Apple" : "Enter account and password"',
-        "explain saved credentials")
+# Later account-verification overlays replace this caption with a live state.
+# Do not regress or reject an already-patched dashboard on its next rebuild.
+if 'appleInfo.state === "verified"' not in index.read_text():
+    replace(index,
+            'appleDone ? "Account details saved" : "Enter account and password"',
+            'appleDone ? "Credentials saved · not verified with Apple" : "Enter account and password"',
+            "explain saved credentials")
 replace(index,
         'c.auto_check ? "Automatic renewal enabled" : "Automatic renewal disabled"',
         'c.auto_check ? "Renewal enabled · success not yet verified" : "Automatic renewal disabled"',

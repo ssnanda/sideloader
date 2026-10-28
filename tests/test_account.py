@@ -23,6 +23,7 @@ class AccountRemovalTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         config.DATA = pathlib.Path(temp.name)
+        config.STATE = config.DATA / 'state'
         self.saved = {"APPLE_ID": "old@example.com", "APPLE_PASSWORD": "old-secret", "AUTO_CHECK": "1"}
         config.update = self.saved.update
         self.app = types.SimpleNamespace(idle=lambda: None)
