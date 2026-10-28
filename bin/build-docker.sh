@@ -10,18 +10,20 @@ UPSTREAM_REPO='https://github.com/filippofinke/sideloop.git'
 START=true
 OPEN=false
 LOGS=false
+NO_CACHE=false
 
 usage() {
   cat <<'USAGE'
 Build SideLoader's Docker server locally on macOS or Ubuntu.
 
-Usage: ./bin/build-docker.sh [--no-start] [--open] [--logs] [--help]
+Usage: ./bin/build-docker.sh [--no-start] [--open] [--logs] [--no-cache] [--help]
 
   (no args)    Clone upstream into build/ if missing, apply the source overlay,
                validate Docker networking, build and start the server.
   --no-start   Build the Docker image but don't start or restart containers.
   --open       Open the local dashboard in the default browser after starting.
   --logs       Follow container logs after starting; Ctrl-C stops log viewing.
+  --no-cache   Force Docker to rebuild all image layers rather than reuse cache.
   --help       Show this help.
 
 The upstream checkout and all persistent data stay in ignored build/.
@@ -34,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --no-start) START=false ;;
     --open) OPEN=true ;;
     --logs) LOGS=true ;;
+    --no-cache) NO_CACHE=true ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
   esac
@@ -84,16 +87,28 @@ python3 "$ROOT_DIR/overlay/patch-retry-guard.py" "$UPSTREAM" "$ROOT_DIR/overlay"
 python3 "$ROOT_DIR/overlay/patch-apple-verification.py" "$UPSTREAM"
 python3 "$ROOT_DIR/overlay/patch-install-workflow.py" "$UPSTREAM"
 python3 "$ROOT_DIR/overlay/patch-backend-info.py" "$UPSTREAM" "$ROOT_DIR/overlay"
-python3 -m py_compile "$UPSTREAM/sideloop/server.py" "$UPSTREAM/sideloop/sources.py" "$UPSTREAM/sideloop/installed.py" "$UPSTREAM/sideloop/diagnostics.py" "$UPSTREAM/sideloop/github_sources.py" "$UPSTREAM/sideloop/github_scan.py" "$UPSTREAM/sideloop/retry_guard.py" "$UPSTREAM/sideloop/account.py" "$UPSTREAM/sideloop/backend_info.py"
+python3 "$ROOT_DIR/overlay/patch-sideloop-version.py" "$UPSTREAM" "$ROOT_DIR/overlay" "$ROOT_DIR/VERSION"
+python3 -m py_compile "$UPSTREAM/sideloop/server.py" "$UPSTREAM/sideloop/sources.py" "$UPSTREAM/sideloop/installed.py" "$UPSTREAM/sideloop/diagnostics.py" "$UPSTREAM/sideloop/github_sources.py" "$UPSTREAM/sideloop/github_scan.py" "$UPSTREAM/sideloop/retry_guard.py" "$UPSTREAM/sideloop/account.py" "$UPSTREAM/sideloop/backend_info.py" "$UPSTREAM/sideloop/sideloop_info.py"
 compose=( docker compose -f "$UPSTREAM/docker-compose.yml" -f "$OVERRIDE" )
 "${compose[@]}" config --quiet || { echo 'Docker Compose configuration is invalid.' >&2; exit 1; }
 
 if [[ "$START" == true && "$(uname -s)" == Darwin ]]; then
   "$ROOT_DIR/bin/lib/macos-relay.sh" install
 fi
-if [[ "$START" == true ]]; then
+printf '\nAll SideLoader source overlays validated.\n'
+printf 'Sideloop upstream base: %s (plus SideLoader overlays %s)\n' "$(git -C "$UPSTREAM" rev-parse --short HEAD)" "$(cat "$ROOT_DIR/VERSION")"
+if [[ "$NO_CACHE" == true ]]; then
+  echo 'Starting a FULL Docker image rebuild (--no-cache).'
+  "${compose[@]}" build --no-cache
+  if [[ "$START" == true ]]; then
+    echo 'Starting newly rebuilt Docker image...'
+    "${compose[@]}" up --detach --no-build --remove-orphans
+  fi
+elif [[ "$START" == true ]]; then
+  echo 'Building changed Docker image layers and starting the container (Docker cache enabled)...'
   "${compose[@]}" up --detach --build --remove-orphans
 else
+  echo 'Building Docker image (Docker cache enabled)...'
   "${compose[@]}" build
 fi
 printf '\nSideLoader version: %s\n' "$(cat "$ROOT_DIR/VERSION")"
@@ -104,6 +119,8 @@ if [[ "$START" == true ]]; then
   printf 'iPhone on same Wi-Fi: http://<server-LAN-IP>:38080\n'
   printf 'AltStore sources: http://localhost:38080/sources\n'
   printf 'Runtime data is preserved across builds in build/sideloop/data/.\n'
+  printf 'Docker project status:\n'
+  "${compose[@]}" ps
   if [[ "$OPEN" == true ]]; then
     case "$(uname -s)" in
       Darwin) open 'http://localhost:38080' ;;

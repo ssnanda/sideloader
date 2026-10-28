@@ -36,8 +36,17 @@ MARKER = '/* SideLoader streamlined navigation and setup steps */'
 
 
 def upgrade_offline_step():
-    """Update existing patched dashboards too; never clear saved device pairing."""
+    """Migrate older Step 1 layouts without touching already upgraded installs."""
     global source
+    # The four-stage wizard and device-health overlay have already migrated
+    # live connection status; the static old subtitle no longer exists.
+    if '/* SideLoader four-stage installation workflow v1 */' in source:
+        expected = ('const deviceDone = devs.length > 0 && onlineDevice;',
+                    'setupDoneSnapshot[0] && !deviceDone',
+                    'const connectionLabel =')
+        if not all(item in source for item in expected):
+            sys.exit('Cannot safely update Step 1: newer wizard lacks required live device checks')
+        return
     changes = (
         ('  const deviceDone = devs.length > 0;',
          '  const deviceDone = devs.length > 0 && onlineDevice;'),
@@ -51,15 +60,18 @@ def upgrade_offline_step():
     for before, after in changes:
         if after in source:
             continue
+        # The device-health patch replaces the static subtitle with a
+        # computed label carrying the last-checked time.
+        if before == '"Saved · Offline"' and 'const connectionLabel =' in source:
+            continue
         if source.count(before) != 1:
             sys.exit('Cannot safely upgrade offline Step 1: missing or ambiguous wizard anchor')
         source = source.replace(before, after, 1)
 
-
 if MARKER in source:
     upgrade_offline_step()
     save()
-    print('SideLoader navigation already installed; offline Step 1 updated.')
+    print('SideLoader navigation already installed; newer wizard preserved.')
     sys.exit(0)
 
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Default: pull the latest code while preserving local edits. -f discards all uncommitted edits and unpushed commits.
+# SideLoader updater: report local vs GitHub versions before and after synchronizing.
+# Preserve local commits/edits by default and NEVER push automatically.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -9,24 +10,24 @@ FORCE=false
 
 usage() {
   cat <<'HELP'
-SideLoader: update local project from GitHub.
+SideLoader: compare and update the local project from GitHub.
 
 Usage: ./bin/pull-latest.sh [-f|--force] [--help]
 
-Default: stash local edits (including untracked files), rebase on origin,
-         then restore those edits. Ignored build/ data is never touched.
--f, --force: replace tracked files and unpushed commits with the remote branch;
-             remove untracked files/directories (NOT ignored build/ data).
-             Use only if you intentionally want to discard local work.
-If run from an unpacked ZIP instead of a Git checkout, clone to
-~/Projects/sideloader without changing the extracted directory.
+Default: show local/GitHub versions, download remote changes, rebase local
+         commits safely, then restore uncommitted/untracked edits.
+         Nothing is pushed. The ignored build/ folder is never touched.
+-f, --force: discard uncommitted tracked edits, untracked files, and local-only
+             commits, then reset to GitHub main. IGNORED build/ remains intact.
+             Use only when you deliberately want to discard local work.
+When started from an extracted ZIP, clone to ~/Projects/sideloader.
 HELP
 }
-while [[ $# -gt 0 ]]; do
+while (( $# )); do
   case "$1" in
     -f|--force) FORCE=true ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
+    *) printf 'Unknown option: %s\n' "$1" >&2; usage; exit 2 ;;
   esac
   shift
 done
@@ -37,20 +38,17 @@ if [[ ! -d "$ROOT_DIR/.git" ]]; then
   [[ ! -e "$DEST" ]] || { echo "Directory already exists: $DEST" >&2; exit 1; }
   mkdir -p "$(dirname "$DEST")"
   git clone "$REPO_URL" "$DEST"
-  echo "SideLoader cloned to $DEST. Run its bin/build-docker.sh to deploy."
+  printf '\nSideLoader cloned to %s\nVersion: %s\nRun ./bin/build-docker.sh to deploy.\n' "$DEST" "$(cat "$DEST/VERSION")"
   exit 0
 fi
 cd "$ROOT_DIR"
-ORIGIN="$(git remote get-url origin 2>/dev/null || true)"
+ORIGIN="$(git config --get remote.origin.url 2>/dev/null || true)"
 case "$ORIGIN" in
   "https://github.com/$EXPECTED_REPO"|"https://github.com/$EXPECTED_REPO.git"|"git@github.com:$EXPECTED_REPO.git"|"ssh://git@github.com/$EXPECTED_REPO.git") ;;
   *) echo "Unexpected origin '$ORIGIN'; expected $EXPECTED_REPO." >&2; exit 1 ;;
 esac
-BRANCH="$(git symbolic-ref --quiet --short HEAD)" || {
-  echo 'Cannot pull in detached HEAD.' >&2; exit 1;
-}
+BRANCH="$(git symbolic-ref --quiet --short HEAD)" || { echo 'Cannot pull in detached HEAD.' >&2; exit 1; }
 
-# Do not disturb an existing merge, rebase or unresolved index.
 if [[ -d "$(git rev-parse --git-path rebase-merge)" || \
       -d "$(git rev-parse --git-path rebase-apply)" || \
       -f "$(git rev-parse --git-path MERGE_HEAD)" || \
@@ -59,45 +57,80 @@ if [[ -d "$(git rev-parse --git-path rebase-merge)" || \
   exit 1
 fi
 
-if [[ "$FORCE" == true ]]; then
-  echo "Force syncing origin/$BRANCH. Uncommitted edits and local-only commits will be discarded."
-  git fetch origin "$BRANCH"  # Never erase data if fetch failed.
-  git reset --hard FETCH_HEAD
-  git clean -fd            # Never -x: ignored build/ remains.
-  echo "SideLoader matches origin/$BRANCH. Ignored build/ data was preserved."
-  exit 0
-fi
+version_at() { git show "$1:VERSION" 2>/dev/null | tr -d '\r\n' || printf 'unknown'; }
+OLD_HEAD="$(git rev-parse HEAD)"
+OLD_SHA="$(git rev-parse --short HEAD)"
+OLD_VERSION="$(version_at HEAD)"
 
-STASHED=false
-if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
-  echo 'Preserving local changes, including untracked files...'
-  PREVIOUS_STASH="$(git rev-parse -q --verify refs/stash 2>/dev/null || true)"
-  git stash push --include-untracked -m "sideloader-pull-autostash-$(date +%Y%m%d%H%M%S)" >/dev/null
-  NEW_STASH="$(git rev-parse -q --verify refs/stash 2>/dev/null || true)"
-  if [[ -z "$NEW_STASH" || "$NEW_STASH" == "$PREVIOUS_STASH" ]]; then
-    echo 'Could not safely stash local changes; cancelled.' >&2
-    exit 1
-  fi
-  STASHED=true
-fi
-
-echo "Pulling origin/$BRANCH into $ROOT_DIR..."
-if ! git -c rebase.autoStash=false pull --rebase origin "$BRANCH"; then
-  echo 'Pull failed; attempting to restore local changes.' >&2
-  git rebase --abort >/dev/null 2>&1 || true
-  if [[ "$STASHED" == true ]]; then
-    if ! git stash pop --index; then
-      echo 'Your changes remain in git stash if they could not be restored.' >&2
+if [[ "$FORCE" == false ]]; then
+  STASHED=false
+  if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+    echo 'Preserving local uncommitted changes and untracked files...'
+    PREVIOUS_STASH="$(git rev-parse -q --verify refs/stash 2>/dev/null || true)"
+    git stash push --include-untracked -m "sideloader-pull-autostash-$(date +%Y%m%d%H%M%S)" >/dev/null
+    NEW_STASH="$(git rev-parse -q --verify refs/stash 2>/dev/null || true)"
+    if [[ -z "$NEW_STASH" || "$NEW_STASH" == "$PREVIOUS_STASH" ]]; then
+      echo 'Could not safely stash local changes; cancelled.' >&2
+      exit 1
     fi
+    STASHED=true
   fi
+fi
+
+echo "Checking origin/$BRANCH..."
+if ! git fetch origin "$BRANCH"; then
+  echo 'Could not fetch GitHub. No local commits were replaced.' >&2
+  if [[ "${STASHED:-false}" == true ]]; then git stash pop --index || true; fi
   exit 1
 fi
-if [[ "$STASHED" == true ]]; then
-  echo 'Restoring pre-pull changes...'
-  if ! git stash pop --index; then
-    echo 'Pull succeeded, but restoring changes conflicted. The stash is retained.' >&2
+REMOTE_HEAD="$(git rev-parse FETCH_HEAD)"
+REMOTE_SHA="$(git rev-parse --short FETCH_HEAD)"
+REMOTE_VERSION="$(version_at FETCH_HEAD)"
+printf '\nSideLoader version comparison (before update)\n'
+printf '  Local:  %-15s commit %s\n' "$OLD_VERSION" "$OLD_SHA"
+printf '  GitHub: %-15s commit %s\n\n' "$REMOTE_VERSION" "$REMOTE_SHA"
+
+if [[ "$FORCE" == true ]]; then
+  echo "FORCE MODE: replacing local commits and tracked/untracked edits with origin/$BRANCH..."
+  git reset --hard FETCH_HEAD
+  git clean -fd  # Never -x: ignored build/ and local private runtime data are preserved.
+else
+  echo 'Downloading/rebasing GitHub changes while preserving local commits...'
+  if ! git -c rebase.autoStash=false rebase FETCH_HEAD; then
+    echo 'Rebase failed. Attempting to restore the pre-pull state.' >&2
+    git rebase --abort >/dev/null 2>&1 || true
+    if [[ "$STASHED" == true ]]; then
+      if ! git stash pop --index; then echo 'Your edits remain in git stash if restoration conflicted.' >&2; fi
+    fi
     exit 1
   fi
+  if [[ "$STASHED" == true ]]; then
+    echo 'Restoring uncommitted local changes...'
+    if ! git stash pop --index; then
+      echo 'Code synchronized, but restoring edits conflicted. The stash remains available.' >&2
+      exit 1
+    fi
+  fi
 fi
-echo "SideLoader is current on $BRANCH. Docker is unchanged until you run ./bin/build-docker.sh."
-git status --short
+
+LOCAL_HEAD="$(git rev-parse HEAD)"
+LOCAL_SHA="$(git rev-parse --short HEAD)"
+LOCAL_VERSION="$(version_at HEAD)"
+printf '\nCurrent SideLoader state\n'
+printf '  Local:  %-15s commit %s\n' "$LOCAL_VERSION" "$LOCAL_SHA"
+printf '  GitHub: %-15s commit %s\n' "$REMOTE_VERSION" "$REMOTE_SHA"
+if [[ "$OLD_HEAD" != "$LOCAL_HEAD" ]]; then
+  printf '\nChanges applied:\n'
+  git diff --stat "$OLD_HEAD" "$LOCAL_HEAD" || true
+elif [[ "$FORCE" == false ]]; then
+  echo 'No new commits to apply (already current).'
+fi
+if [[ "$LOCAL_HEAD" != "$REMOTE_HEAD" ]] && git merge-base --is-ancestor "$REMOTE_HEAD" "$LOCAL_HEAD"; then
+  printf '\nLocal-only commits retained: %s (not pushed)\n' "$(git rev-list --count "$REMOTE_HEAD"..HEAD)"
+fi
+if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+  echo 'Uncommitted local edits retained:'
+  git status --short
+fi
+printf '\nUpdate finished. Docker has NOT been rebuilt yet.\n'
+printf '  Next: ./bin/build-docker.sh\n'
