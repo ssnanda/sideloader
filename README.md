@@ -31,9 +31,9 @@ All three scripts accept **no arguments**; defaults match the Siftidy workflow. 
 
 ## First install on macOS
 
-1. Install Docker Desktop **4.34+**, `git`, `python3`, and `socat` (`brew install socat`).
+1. Install Docker Desktop **4.34+**, `git`, and `python3`. No Homebrew or other host-side packages are required.
 2. In Docker Desktop, open **Settings → Resources → Network → Enable host networking** and restart Docker Desktop. Enable Docker Desktop launch at login; keep your Mac awake while you expect renewals.
-3. Clone the repository and run `./bin/build-docker.sh`. It installs a per-user LaunchAgent to forward macOS `usbmuxd` securely from `127.0.0.1:27015` into the Docker host networking stack.
+3. Clone the repository and run `./bin/build-docker.sh`. It installs the repository's Python standard-library relay as a per-user LaunchAgent, forwarding macOS `usbmuxd` securely from `127.0.0.1:27015` into the Docker host networking stack.
 4. Connect iPhone to your Mac over USB. Trust the Mac and in Finder turn on **Show this iPhone when on Wi-Fi**. Then follow the same dashboard and Sources steps above.
 
 macOS Docker Desktop host networking works at TCP/UDP level; it is **not** full layer-2 access to the Mac's LAN. Initial pairing and Wi-Fi discovery on your specific iOS version must be verified.
@@ -48,7 +48,7 @@ macOS Docker Desktop host networking works at TCP/UDP level; it is **not** full 
 
 ## Networking
 
-The Docker container listens on TCP **38080**. Linux uses the upstream service's `network_mode: host`, and the UI itself listens on 38080. Mac uses opt-in Docker Desktop host networking and a loopback-only macOS USB mux relay. Docker's bundled anisette server is published **only** to the host loopback on TCP 6969. The relay is **only** on TCP 27015 loopback. Protect the dashboard with its password; allow 38080 on your trusted LAN only, and **never port-forward 38080** to the internet. The dashboard uses HTTP; use a VPN/reverse proxy with TLS if remote access is required.
+The Docker container listens on TCP **38080**. Linux uses the upstream service's `network_mode: host`, and the UI itself listens on 38080. Mac uses opt-in Docker Desktop host networking and a loopback-only Python USB mux relay. Docker's bundled anisette server is published **only** to the host loopback on TCP 6969. The relay is **only** on TCP 27015 loopback. Protect the dashboard with its password; allow 38080 on your trusted LAN only, and **never port-forward 38080** to the internet. The dashboard uses HTTP; use a VPN/reverse proxy with TLS if remote access is required.
 
 Compose configuration (paths based on the checked-out SideLoader project):
 

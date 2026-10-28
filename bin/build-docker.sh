@@ -48,7 +48,6 @@ docker info >/dev/null 2>&1 || { echo 'Start Docker Desktop or Docker Engine fir
 
 case "$(uname -s)" in
   Darwin)
-    need socat
     [[ -S /var/run/usbmuxd ]] || { echo 'Missing /var/run/usbmuxd socket (Apple Mobile Device service).' >&2; exit 1; }
     OVERRIDE="$ROOT_DIR/deploy/mac-host.yml"
     echo 'macOS requires Docker Desktop 4.34+ with Settings > Resources > Network > host networking enabled.'

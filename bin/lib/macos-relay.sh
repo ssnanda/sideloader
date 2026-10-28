@@ -1,41 +1,60 @@
 #!/usr/bin/env bash
 # Keep the USB mux socket accessible to Docker Desktop's opt-in host networking,
-# while binding the TCP proxy ONLY to the Mac loopback interface.
+# while binding the Python TCP relay ONLY to the Mac loopback interface.
 set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LABEL="local.minisideload.usbmux-relay"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 SCOPE="gui/$(id -u)"
+RELAY="$ROOT_DIR/bin/lib/usbmux-relay.py"
 case "${1:-}" in
   install)
-    SOCAT="$(command -v socat || true)"
-    [[ -n "$SOCAT" ]] || { echo 'socat not installed (brew install socat)' >&2; exit 1; }
+    PYTHON="$(command -v python3 || true)"
+    [[ -n "$PYTHON" ]] || { echo 'Missing required tool: python3' >&2; exit 1; }
+    [[ -f "$RELAY" ]] || { echo "Missing USB relay: $RELAY" >&2; exit 1; }
     [[ -S /var/run/usbmuxd ]] || { echo 'Missing /var/run/usbmuxd socket' >&2; exit 1; }
     mkdir -p "$HOME/Library/LaunchAgents"
     if [[ -e "$PLIST" ]]; then
       launchctl bootout "$SCOPE" "$PLIST" >/dev/null 2>&1 || true
     fi
-    cat > "$PLIST" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>Label</key><string>$LABEL</string>
-<key>ProgramArguments</key><array>
-<string>$SOCAT</string>
-<string>TCP-LISTEN:27015,bind=127.0.0.1,reuseaddr,fork</string>
-<string>UNIX-CONNECT:/var/run/usbmuxd</string>
-</array>
-<key>RunAtLoad</key><true/>
-<key>KeepAlive</key><true/>
-</dict></plist>
-EOF
+    "$PYTHON" - "$PLIST" "$LABEL" "$PYTHON" "$RELAY" <<'PY'
+import plistlib
+import sys
+
+path, label, python, relay = sys.argv[1:]
+config = {
+    "Label": label,
+    "ProgramArguments": [
+        python,
+        "-u",
+        relay,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "27015",
+        "--socket",
+        "/var/run/usbmuxd",
+    ],
+    "RunAtLoad": True,
+    "KeepAlive": True,
+    "ProcessType": "Background",
+    "ThrottleInterval": 5,
+}
+with open(path, "wb") as handle:
+    plistlib.dump(config, handle, sort_keys=False)
+PY
     chmod 600 "$PLIST"
     launchctl bootstrap "$SCOPE" "$PLIST"
-    echo 'macOS USB relay installed. Listening on 127.0.0.1:27015 only.'
+    echo 'macOS Python USB relay installed. Listening on 127.0.0.1:27015 only.'
     ;;
   uninstall)
     if [[ -f "$PLIST" ]]; then
       launchctl bootout "$SCOPE" "$PLIST" >/dev/null 2>&1 || true
-      rm -f "$PLIST"
+      osascript - "$PLIST" <<'APPLESCRIPT'
+on run argv
+  tell application "Finder" to delete POSIX file (item 1 of argv)
+end run
+APPLESCRIPT
     fi
     echo 'macOS USB relay removed.'
     ;;
