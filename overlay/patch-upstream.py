@@ -6,6 +6,22 @@ from pathlib import Path
 if len(sys.argv) != 3:
     sys.exit("Usage: patch-upstream.py <upstream-repo> <starter-dir>")
 repo, starter = Path(sys.argv[1]), Path(sys.argv[2])
+
+# Pin the AltServer-Linux revision containing Apple's October 2026 -80045 and
+# updated 2FA authentication fixes. Refuse unknown upstream revisions rather
+# than silently building an incompatible authentication client.
+dockerfile = repo / "Dockerfile"
+docker_source = dockerfile.read_text()
+old_altserver_tag = "ARG ALTSERVER_TAG=ng-2026-09-13"
+fixed_altserver_tag = "ARG ALTSERVER_TAG=ng-2026-10-20"
+if old_altserver_tag in docker_source:
+    dockerfile.write_text(docker_source.replace(old_altserver_tag, fixed_altserver_tag, 1))
+    print("Pinned AltServer-Linux to ng-2026-10-20 (-80045/2FA fixes).")
+elif fixed_altserver_tag in docker_source:
+    print("AltServer-Linux compatibility revision already pinned.")
+else:
+    sys.exit("Upstream Sideloop changed: unknown ALTSERVER_TAG; no patch applied")
+
 target = repo / "sideloop" / "server.py"
 original = target.read_text()
 mark = "# MiniSideload source integration v1"

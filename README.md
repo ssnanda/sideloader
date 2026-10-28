@@ -63,6 +63,7 @@ For example, append `ps`, `logs -f`, `down`, or `up -d --build` to the command a
 - An iPhone must be reachable, normally unlocked, on the same network, and running a compatible iOS device service when a renewal happens. Test an actual seven-day cycle before relying on it.
 - Some iOS 27 combinations may fail device discovery or signing as Apple interfaces change. The installer may not preserve data if the signing identity/bundle ID changes. Keep backups.
 - Third-party Sideloop / AltServer-Linux receive your Apple ID credentials. Use a separate Apple ID and review their implementations.
+- The build pins AltServer-Linux `ng-2026-10-20`, which includes the October 2026 Apple authentication `-80045` and updated 2FA fixes.
 - `bin/build-docker.sh` **does not silently update the upstream Sideloop checkout** on subsequent runs. Review it before updating. The upstream clone is intentionally ignored by Git.
 - This project was checked with Bash syntax, Python compilation and local unit tests, **not** deployed or tested with a real iPhone or a Docker daemon here.
 
