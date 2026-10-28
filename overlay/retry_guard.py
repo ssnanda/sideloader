@@ -1,16 +1,16 @@
-"""Persist a one-attempt signing circuit breaker, scoped to the current Apple Account.
+"""Persistent one-invocation Apple signing circuit breaker.
 
-This is not an Apple authentication replacement. It only prevents retries after
-an unsuccessful signing attempt. Never store the password or raw AltServer output.
+No raw Apple auth output, credentials, or email addresses are persisted.
+The reservation is created BEFORE AltServer starts; crashes remain blocked.
 """
 import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
+import secrets
 import sys
 import time
-
 from . import config
 
 FILE = config.STATE / "sideloader-signing-block.json"
@@ -19,64 +19,22 @@ LOCK = config.STATE / ".sideloader-signing-block.lock"
 
 def _identity():
     email = config.read().get("APPLE_ID", "").strip().casefold()
-    return hashlib.sha256(email.encode("utf-8")).hexdigest() if email else ""
+    return hashlib.sha256(email.encode()).hexdigest() if email else ""
 
 
 def _read():
     try:
         value = json.loads(FILE.read_text())
-        return value if isinstance(value, dict) else {}
+        if not isinstance(value, dict):
+            raise ValueError("unexpected guard contents")
+        return value
     except FileNotFoundError:
         return {}
     except (ValueError, OSError):
-        return {"account": _identity(), "blocked": True,
-                "code": "guard_state_unreadable", "reason": "safety_state",
-                "message": "The stored signing safety state cannot be read safely.",
-                "action": "Review local data permissions, then explicitly resume signing.",
+        return {"account": _identity(), "blocked": True, "code": "guard_state_unreadable",
+                "reason": "safety_state", "message": "The signing safety state cannot be read safely.",
+                "action": "Review local permissions before explicitly resuming signing.",
                 "since": int(time.time())}
-
-
-def status():
-    record = _read()
-    if not record or record.get("account") != _identity():
-        return {"blocked": False}
-    return {key: record[key] for key in
-            ("blocked", "code", "reason", "message", "action", "since")
-            if key in record}
-
-
-def assert_allowed():
-    state = status()
-    if state.get("blocked"):
-        raise RuntimeError(
-            "Signing paused after a previous failure: " + state.get("message", "Unknown error")
-            + ". " + state.get("action", "Review Activity and explicitly resume signing.")
-        )
-
-
-def _classify(output, rc):
-    text = output.lower()
-    if "-20209" in text or "locked for security reasons" in text:
-        return ("-20209", "account_locked", "Apple reports this account is locked.",
-                "Unlock the account at iforgot.apple.com or replace it in Step 2; then explicitly resume.")
-    if "-36607" in text or "unable to sign you in to your apple account. try again later" in text:
-        return ("-36607", "apple_authentication_unavailable",
-                "AltServer could not complete Apple Account sign-in (-36607). The reason is not confirmed; it may involve Apple's authentication service or anisette.",
-                "Do not retry in a loop. Confirm the account works at account.apple.com, inspect the configured anisette service, and review Copy Diagnostics. Resume manually only after checking the cause.")
-    if "-80046" in text:
-        return ("-80046", "signing_failure", "AltServer failed with -80046 after contacting Apple; the exact cause is not established.",
-                "Review Copy Diagnostics and signing backend compatibility before explicitly resuming.")
-    if "-80045" in text:
-        return ("-80045", "signing_failure", "AltServer reported an Apple signing or authentication error (-80045).",
-                "Check the Apple Account and signing backend before explicitly resuming.")
-    if "verification failed" in text or "invalid verification" in text:
-        return ("verification_failed", "verification", "Apple account verification was unsuccessful.",
-                "Confirm the Apple Account and 2FA on Apple's website before explicitly resuming.")
-    if "timed out" in text or int(rc) == 124:
-        return ("timeout", "timeout", "Signing or installation timed out.",
-                "Check the iPhone connection and Activity diagnostics before explicitly resuming.")
-    return ("install_failed", "installation", "The signing/install attempt ended unsuccessfully.",
-            "Read Activity diagnostics for the actual error and correct it before explicitly resuming.")
 
 
 def _write(record):
@@ -91,58 +49,168 @@ def _write(record):
         temp.unlink(missing_ok=True)
 
 
-def failed(output, rc=1):
-    # The first failure stops further attempts; later classification can refine
-    # a generic failure, never re-open or increment retry counts.
-    if not _identity():
-        return status()
-    FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(LOCK, "a+") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+def _mutex():
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(LOCK, "a+")
+    fcntl.flock(handle, fcntl.LOCK_EX)
+    return handle
+
+
+def status():
+    record = _read()
+    if not record:
+        return {"blocked": False}
+    # A different Apple Account cannot silently reset a failure or interrupted
+    # attempt. Only the explicit resume API can clear the global reservation.
+    if record.get("account") != _identity():
+        return {"blocked": True, "code": "previous_account_attempt",
+                "reason": "account_changed",
+                "message": "An earlier Apple Account signing attempt is still paused.",
+                "action": "After confirming the new account is accessible, explicitly resume to permit one manual attempt.",
+                "since": record.get("since", 0)}
+    if record.get("phase") == "running":
+        return {"blocked": True, "code": "attempt_in_progress",
+                "reason": "signing_reserved",
+                "message": "One AltServer signing attempt has been reserved. It may still be running or may have been interrupted.",
+                "action": "Do not start another attempt while signing is running. If it terminated unexpectedly, review Activity and explicitly resume.",
+                "since": record.get("since", 0)}
+    return {k: record[k] for k in
+            ("blocked", "code", "reason", "message", "action", "since") if k in record}
+
+
+def assert_allowed():
+    result = status()
+    if result.get("blocked"):
+        raise RuntimeError("Signing paused: " + result.get("message", "Unknown failure")
+                           + " " + result.get("action", "Review Activity before resuming."))
+
+
+def _classify(output, rc):
+    text = output.lower()
+    if "-20209" in text or "locked for security reasons" in text:
+        return ("-20209", "account_locked", "Apple reports that this account is locked.",
+                "Unlock the account using Apple account recovery before explicitly resuming.")
+    if "-36607" in text or "unable to sign you in to your apple account. try again later" in text:
+        return ("-36607", "apple_authentication_unavailable",
+                "AltServer could not complete Apple Account sign-in (-36607). The exact cause is not established; it may involve Apple's authentication service or anisette.",
+                "Avoid repeated attempts. Confirm the account on account.apple.com and inspect anisette and Copy Diagnostics before manually resuming.")
+    if "-80046" in text:
+        return ("-80046", "signing_failure",
+                "AltServer failed with -80046; the precise Apple authentication cause isn't established.",
+                "Review Copy Diagnostics and signing backend compatibility before resuming.")
+    if "-80045" in text:
+        return ("-80045", "signing_failure", "AltServer reported Apple signing error -80045.",
+                "Check anisette identity and account before resuming.")
+    if "verification failed" in text or "invalid verification" in text or "status code: 401" in text:
+        return ("verification_failed", "verification", "Apple Account verification was unsuccessful.",
+                "Confirm account access and the 2FA code before explicitly resuming.")
+    if "timed out" in text or int(rc) == 124:
+        return ("timeout", "timeout", "AltServer signing or installation timed out.",
+                "Inspect the connection and signing logs before explicitly resuming.")
+    if int(rc) < 0 or int(rc) in (130, 137, 143) or "terminated" in text:
+        return ("interrupted", "interrupted", "The signing process was interrupted before a verified installation.",
+                "Review Activity and explicitly resume only when the previous process has stopped.")
+    return ("install_failed", "installation", "The signing/install attempt ended without a verified app installation.",
+            "Read Activity diagnostics for the actual error and correct it before resuming.")
+
+
+def begin():
+    """Atomically reserve exactly one AltServer invocation; returns a secret-ish token.
+
+    The token is not an Apple credential. It prevents a stale child from
+    clearing another attempt's reservation.
+    """
+    with _mutex():
+        assert_allowed()
+        key = _identity()
+        if not key:
+            raise RuntimeError("Save an Apple Account before installing")
+        token = secrets.token_hex(20)
+        _write({"account": key, "phase": "running", "blocked": True,
+                "token": token, "since": int(time.time())})
+        return token
+
+
+def _owns(record, token):
+    return bool(token and record.get("token") == token and record.get("account") == _identity())
+
+
+def succeeded(token):
+    """Release only after the installed app's new profile is verified."""
+    with _mutex():
+        record = _read()
+        if record.get("phase") != "running" or not _owns(record, token):
+            raise RuntimeError("Cannot confirm a signing attempt that is not reserved by this job")
+        FILE.unlink(missing_ok=True)
+    return {"blocked": False}
+
+
+def failed(output, rc=1, token=None):
+    """Persist a failure; PTY job output may refine a generic shell error.
+
+    An already-blocked account never gets silently rearmed. Failures from
+    unreserved/background jobs cannot overwrite a different account's lock.
+    """
+    with _mutex():
         old = _read()
+        if not old:
+            # Legacy runs started before the new reservation was deployed.
+            old = {"account": _identity(), "since": int(time.time())}
+        if old.get("account") != _identity():
+            return status()
+        if old.get("phase") == "running" and not _owns(old, token):
+            # PTY can refine once the shell wrote a generic failure, but it
+            # cannot finalize a running reservation without its token.
+            return status()
         code, reason, message, action = _classify(output, rc)
-        if old.get("blocked") and old.get("account") == _identity():
-            # A PTY's final log may reveal a specific error missed by the shell.
+        if old.get("blocked") and old.get("phase") != "running":
             if old.get("code") != "install_failed" or code == "install_failed":
                 return status()
-        _write({"account": _identity(), "blocked": True, "code": code,
-                "reason": reason, "message": message, "action": action,
-                "since": old.get("since", int(time.time())) if old.get("account") == _identity()
-                         else int(time.time())})
+        _write({"account": _identity(), "blocked": True, "phase": "failed",
+                "code": code, "reason": reason, "message": message,
+                "action": action, "since": old.get("since", int(time.time()))})
     return status()
 
 
 def resume():
-    FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(LOCK, "a+") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        if FILE.exists():
-            FILE.unlink()
-    return {"ok": True, "message": "Signing resumed. The next installation is one new attempt."}
+    with _mutex():
+        # Called only through the explicit authenticated application API.
+        FILE.unlink(missing_ok=True)
+    return {"ok": True, "message": "Signing explicitly resumed. One new installation may be attempted."}
 
 
 def _cli():
     if len(sys.argv) < 2:
-        raise SystemExit("Usage: retry_guard.py check|failed <log-file> <exit-code>")
+        raise SystemExit("Usage: retry_guard check|begin|success TOKEN|failed FILE RC TOKEN")
     command = sys.argv[1]
     if command == "check":
         try:
             assert_allowed()
+            return 0
         except RuntimeError as exc:
             print("SIGNING STOPPED:", exc)
             return 73
+    if command == "begin" and len(sys.argv) == 2:
+        try:
+            print(begin())
+            return 0
+        except RuntimeError as exc:
+            print("SIGNING STOPPED:", exc, file=sys.stderr)
+            return 73
+    if command == "success" and len(sys.argv) == 3:
+        succeeded(sys.argv[2])
         return 0
-    if command == "failed" and len(sys.argv) == 4:
+    if command == "failed" and len(sys.argv) in (4, 5):
         path = Path(sys.argv[2])
         try:
             output = path.read_text(errors="replace")[-30000:]
         except OSError:
             output = ""
-        result = failed(output, int(sys.argv[3]))
+        result = failed(output, int(sys.argv[3]), sys.argv[4] if len(sys.argv) == 5 else None)
         print("SIGNING PAUSED:", result.get("message", "Signing failed"))
         print("NEXT STEP:", result.get("action", "Review Activity before resuming."))
         return 0
-    raise SystemExit("Unknown signing guard action")
+    raise SystemExit("Unsupported signing safety operation")
 
 
 if __name__ == "__main__":

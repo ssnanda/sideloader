@@ -43,6 +43,14 @@ def verification():
         return {"state": "missing", "message": "Enter an Apple Account and password."}
     from . import retry_guard
     blocked = retry_guard.status()
+    if blocked.get("reason") == "account_changed":
+        # A newly selected account was NOT tested just because another account
+        # was blocked. Show the paused guard without falsely claiming sign-in failed.
+        return {"state": "paused", "code": blocked.get("code", "previous_account_attempt"),
+                "message": blocked.get("message", "A previous account attempt is paused."),
+                "action": blocked.get("action", "Explicitly resume before a new installation.")}
+    if blocked.get("code") == "attempt_in_progress":
+        return {"state": "signing", "message": blocked.get("message", "One signing attempt is underway.")}
     if blocked.get("blocked"):
         return {"state": "failed", "code": blocked.get("code", "unknown"),
                 "message": blocked.get("message", "Apple signing failed."),

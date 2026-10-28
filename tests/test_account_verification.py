@@ -102,6 +102,21 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(state["code"], "-20209")
         self.assertFalse(account.is_verified())
 
+    def test_previous_account_attempt_is_not_falsely_blamed_on_new_account(self):
+        guard.status = lambda: {"blocked": True, "code": "previous_account_attempt",
+                                "reason": "account_changed",
+                                "message": "Earlier account attempt is paused.",
+                                "action": "Explicitly resume."}
+        state = account.verification()
+        self.assertEqual(state["state"], "paused")
+        self.assertFalse(account.is_verified())
+        self.assertNotEqual(state["state"], "failed")
+
+    def test_in_flight_attempt_is_not_called_an_authentication_failure(self):
+        guard.status = lambda: {"blocked": True, "code": "attempt_in_progress",
+                                "message": "One attempt underway."}
+        self.assertEqual(account.verification()["state"], "signing")
+
     def test_symlinked_signing_cache_rejected_without_account_change(self):
         (config.DATA / "AltServerData").symlink_to(config.DATA / "apps", target_is_directory=True)
         with self.assertRaises(RuntimeError):
