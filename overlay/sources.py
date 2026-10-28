@@ -14,7 +14,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import config, ipa, store
+from . import config, ipa, store, github_sources, github_scan
 
 MAX_SOURCE = 2 * 1024 * 1024
 MAX_IPA = 2 * 1024 * 1024 * 1024
@@ -50,6 +50,9 @@ _OPENER = urllib.request.build_opener(SafeRedirect())
 
 def _open(url):
     _allowed(url)
+    private = github_sources.private_download(url)
+    if private is not None:
+        return private
     return _OPENER.open(urllib.request.Request(url, headers={"User-Agent": USER_AGENT}), timeout=35)
 
 
@@ -90,13 +93,18 @@ def _latest(app, source_url):
 
 
 def _catalog(url):
-    with _open(url) as response:
-        obj = json.loads(_read_limited(response, MAX_SOURCE))
-        final_url = response.geturl()
+    if github_sources.is_ref(url):
+        obj, final_url = github_sources.source_contents(url, MAX_SOURCE)
+    else:
+        with _open(url) as response:
+            obj = json.loads(_read_limited(response, MAX_SOURCE))
+            final_url = response.geturl()
     if not isinstance(obj, dict) or not isinstance(obj.get("apps"), list):
         raise ValueError("not an AltStore-compatible source JSON (missing apps array)")
     apps = [_latest(a, final_url) for a in obj["apps"] if isinstance(a, dict)]
-    return {"name": str(obj.get("name") or "Unnamed source"), "apps": [a for a in apps if a]}
+    return {"name": str(obj.get("name") or "Unnamed source"),
+            "identifier": str(obj.get("identifier") or "").strip(),
+            "apps": [a for a in apps if a]}
 
 
 class Sources:
@@ -139,9 +147,10 @@ class Sources:
         info = _catalog(url)  # refuse broken sources
         with _LOCK:
             urls = self._urls()
-            if url not in urls:
-                if len(urls) >= 30:
-                    raise ValueError("maximum 30 saved sources")
+            known = {github_sources.dedup_key(u) for u in urls}
+            if github_sources.dedup_key(url) not in known:
+                if len(urls) >= 200:
+                    raise ValueError("maximum 200 saved sources")
                 self._save(urls + [url])
         return {"ok": True, "name": info["name"], "apps": len(info["apps"])}
 
@@ -205,3 +214,12 @@ class Sources:
                 except (ValueError, RuntimeError) as exc:
                     result["refresh"] = f"not started: {exc}"
             return result
+
+    def github_status(self):
+        return github_scan.status()
+
+    def disconnect_github(self, data):
+        return github_scan.disconnect()
+
+    def scan_github(self, data):
+        return github_scan.scan(self, data)
