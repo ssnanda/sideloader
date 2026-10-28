@@ -1,0 +1,11 @@
+# Runtime: upstream checkout, Apple credentials, pairing records, installed IPAs
+/build/*
+!/build/.gitkeep
+.env
+*.ipa
+*.p12
+*.mobileprovision
+*.mobiledevicepairing
+__pycache__/
+*.py[cod]
+.DS_Store

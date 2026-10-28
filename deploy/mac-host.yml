@@ -1,0 +1,15 @@
+# Requires Docker Desktop 4.34+ with host networking enabled. Container
+# connects to the Mac's loopback-only socket proxy at 127.0.0.1:27015.
+services:
+  app:
+    network_mode: host
+    privileged: false
+    environment:
+      MUX: external
+      USBMUXD_SOCKET_ADDRESS: 127.0.0.1:27015
+      ANISETTE_SERVER: http://127.0.0.1:6969
+      UI_PORT: "38080"
+      ALLOW_HTTP_SOURCES: "${ALLOW_HTTP_SOURCES:-0}"
+      ALLOW_PRIVATE_SOURCE_URLS: "${ALLOW_PRIVATE_SOURCE_URLS:-0}"
+    volumes: !override
+      - ./data:/data

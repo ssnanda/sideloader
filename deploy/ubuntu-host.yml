@@ -1,0 +1,8 @@
+# Sideloop already uses Linux host networking, so UI_PORT controls the
+# actual listening port; port mappings are ignored with network_mode: host.
+services:
+  app:
+    environment:
+      UI_PORT: "38080"
+      ALLOW_HTTP_SOURCES: "${ALLOW_HTTP_SOURCES:-0}"
+      ALLOW_PRIVATE_SOURCE_URLS: "${ALLOW_PRIVATE_SOURCE_URLS:-0}"
