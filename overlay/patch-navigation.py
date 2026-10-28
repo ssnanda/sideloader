@@ -41,10 +41,10 @@ def upgrade_offline_step():
     changes = (
         ('  const deviceDone = devs.length > 0;',
          '  const deviceDone = devs.length > 0 && onlineDevice;'),
-        ('  if (setupDoneSnapshot) {\\n    for (let i = 0;',
-         '  if (setupDoneSnapshot) {\\n'
-         '    // A connected phone going offline returns the wizard to Step 1.\\n'
-         '    if (setupDoneSnapshot[0] && !deviceDone) setupChoice = null;\\n'
+        ('  if (setupDoneSnapshot) {\n    for (let i = 0;',
+         '  if (setupDoneSnapshot) {\n'
+         '    // A connected phone going offline returns the wizard to Step 1.\n'
+         '    if (setupDoneSnapshot[0] && !deviceDone) setupChoice = null;\n'
          '    for (let i = 0;'),
         ('"Saved · Offline"', '"Saved · Offline — reconnect to continue"'),
     )

@@ -136,8 +136,8 @@ class NavigationTests(unittest.TestCase):
       previous=expected.replace(
         '  const deviceDone = devs.length > 0 && onlineDevice;',
         '  const deviceDone = devs.length > 0;',1).replace(
-        '    // A connected phone going offline returns the wizard to Step 1.\\n'
-        '    if (setupDoneSnapshot[0] && !deviceDone) setupChoice = null;\\n',
+        '    // A connected phone going offline returns the wizard to Step 1.\n'
+        '    if (setupDoneSnapshot[0] && !deviceDone) setupChoice = null;\n',
         '',1).replace(
         'Saved · Offline — reconnect to continue', 'Saved · Offline',1)
       self.assertNotEqual(previous,expected)
