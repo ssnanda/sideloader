@@ -55,6 +55,14 @@ class RetryGuardTests(unittest.TestCase):
         guard.failed("Alert: Could not install app.ipa. (-80046)", 1)
         self.assertEqual(guard.status()["code"], "-80046")
 
+    def test_pty_refines_generic_install_failure_to_actual_apple_signin_error(self):
+        token = guard.begin()
+        guard.failed("", 1, token)
+        self.assertEqual(guard.status()["code"], "install_failed")
+        guard.failed("Alert: Could not install app.ipa\\nUnable to sign you in to your Apple Account. Try again later. (-36607)", 1)
+        self.assertEqual(guard.status()["code"], "-36607")
+        self.assertEqual(guard.status()["reason"], "apple_authentication_unavailable")
+
     def test_manual_resume_allows_one_new_launch(self):
         token = guard.begin()
         guard.failed("verification failed", 1, token)
