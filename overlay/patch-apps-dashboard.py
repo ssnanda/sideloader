@@ -26,8 +26,14 @@ def replace(source, old, new, label):
     return source.replace(old, new, 1)
 
 
-s = replace(s, 'from . import log_maintenance',
-            'from . import log_maintenance\nfrom . import device_app_inventory', 'inventory import')
+# Import beside the upstream module import, which is unique across overlay
+# generations. Earlier overlays may legitimately repeat the log_maintenance
+# import in old persistent checkouts; its count is not a migration invariant.
+# Existing inventory import is accepted wherever it appears in the import block.
+if 'from . import device_app_inventory' not in s:
+    s = replace(s, 'from . import auth, config, ipa, pairing, store',
+                'from . import auth, config, ipa, pairing, store\n'
+                'from . import device_app_inventory', 'inventory import')
 s = replace(s,
             '    def signing_resume(self, data):',
             '''    def remove_phone_apps(self, data):

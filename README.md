@@ -78,3 +78,8 @@ SideLoader's pinned AltServer-Linux NG source already contains the October 2026 
 The existing **Verification Code** prompt now validates a six-digit numeric code in the browser **and** again in the server's PTY input handler, permits submission only when an interactive manual refresh job is actively requesting a code, and blocks repeated submissions to the same prompt. The submitted code is cleared from the browser input and redacted if the terminal echoes it, including if output arrives in pieces. Logs and the API output mask standalone six-digit code tokens. After a failed signing attempt, the existing persistent one-invocation guard continues blocking retries until explicitly resumed.
 
 No Apple Account or real device sign-in is performed by the unit tests. This is prompt safety, **not** a fix for `-36607`, `-80046`, SMS delivery, or Apple's server-side restrictions. Rebuild locally to activate the patch.
+
+
+## Persistent-checkout Apps migration hotfix (v0.2.0+26)
+
+Fixes `Apps dashboard patch inventory import: expected one anchor, got 3` after a local repeat build. The Apps overlay now inserts its inventory import beside the unique original Sideloop module import instead of relying on the number of earlier log-maintenance imports. It also recognizes an inventory import already present in another position. Added regression fixtures for repeated log imports, already imported inventory, repeat migrations and an unknown original import. This migration only rewrites application source in the ignored upstream checkout; saved `build/sideloop/data` IPAs, devices, credentials, and signing safety state remain untouched. Rebuild with `./bin/pull-latest.sh && ./bin/build-docker.sh`.

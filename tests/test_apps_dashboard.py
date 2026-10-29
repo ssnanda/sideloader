@@ -6,7 +6,8 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PATCH = ROOT/'overlay'/'patch-apps-dashboard.py'
-SERVER = '''from . import log_maintenance
+SERVER = '''from . import auth, config, ipa, pairing, store
+from . import log_maintenance
 class App:
     def signing_resume(self, data):
         return {}
@@ -88,6 +89,50 @@ class DashboardPatchTests(unittest.TestCase):
             self.assertEqual(b.returncode,0,b.stderr+b.stdout)
             self.assertEqual(ui,(p/'index.html').read_text())
             self.assertEqual(server,(p/'server.py').read_text())
+
+
+    def test_persistent_checkout_with_repeated_log_imports(self):
+        # Reproduces real-world build failure: the log maintenance import
+        # appeared three times, but the upstream base import stayed unique.
+        with tempfile.TemporaryDirectory() as tmp:
+            p=self.setup(tmp)
+            prior=SERVER.replace('from . import log_maintenance',
+                                 '\n'.join(['from . import log_maintenance']*3))
+            self.assertEqual(prior.count('from . import log_maintenance'),3)
+            (p/'server.py').write_text(prior)
+            first=self.run_patch(tmp)
+            self.assertEqual(first.returncode,0,first.stderr+first.stdout)
+            server=(p/'server.py').read_text()
+            ui=(p/'index.html').read_text()
+            self.assertEqual(server.count('from . import device_app_inventory'),1)
+            self.assertIn('renderSetupStep(3, "Apps"',ui)
+            again=self.run_patch(tmp)
+            self.assertEqual(again.returncode,0,again.stderr+again.stdout)
+            self.assertEqual(server,(p/'server.py').read_text())
+            self.assertEqual(ui,(p/'index.html').read_text())
+
+    def test_existing_inventory_import_in_other_position_is_not_duplicated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=self.setup(tmp)
+            (p/'server.py').write_text(SERVER.replace(
+                'from . import log_maintenance',
+                'from . import device_app_inventory\nfrom . import log_maintenance'))
+            out=self.run_patch(tmp)
+            self.assertEqual(out.returncode,0,out.stderr+out.stdout)
+            self.assertEqual((p/'server.py').read_text().count(
+                'from . import device_app_inventory'),1)
+
+    def test_ambiguous_upstream_import_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=self.setup(tmp)
+            bad=SERVER.replace('from . import auth, config, ipa, pairing, store',
+                               'from . import auth, config')
+            (p/'server.py').write_text(bad)
+            result=self.run_patch(tmp)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('inventory import',result.stderr)
+            self.assertEqual((p/'server.py').read_text(),bad)
+            self.assertEqual((p/'index.html').read_text(),PAGE)
 
     def test_fail_closed_on_unrecognized_step(self):
         with tempfile.TemporaryDirectory() as tmp:
