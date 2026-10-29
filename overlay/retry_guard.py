@@ -194,7 +194,7 @@ def cancelled_2fa_timeout():
             return status()
         _write({"account": _identity(), "blocked": True, "phase": "cancelled",
                 "code": "2fa_timeout", "reason": "user_cancelled",
-                "message": "Apple verification was not entered within 30 seconds. SideLoader cancelled the local signing process.",
+                "message": "Apple verification was not entered within 60 seconds. SideLoader cancelled the local signing process.",
                 "action": "No automatic retry. Confirm account access before explicitly permitting one new attempt.",
                 "since": old.get("since", int(time.time()))})
     return status()
