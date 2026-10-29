@@ -115,6 +115,18 @@ class TwoFactorTests(unittest.TestCase):
         self.assertIn('input.value = ""',before[1])
         self.assertNotIn('AltServer',before[0])
 
+    def test_existing_strict_submission_with_deadline_migrates_cleanly(self):
+        pkg = self.patched()
+        jobs = pkg / 'jobs.py'
+        text = jobs.read_text()
+        self.assertIn('self.verification_deadline = None', text)
+        self.assertIn('Apple verification code submitted [redacted]', text)
+        # The second application must not look for the original unsafe
+        # send() method after +33 has inserted its deadline reset.
+        second = subprocess.run(self.cmd, capture_output=True, text=True)
+        self.assertEqual(second.returncode, 0, second.stderr + second.stdout)
+        self.assertEqual(jobs.read_text(), text)
+
     def test_rejects_unknown_ui_without_partial_write(self):
         pkg=self.base/'sideloop'
         (pkg/'index.html').write_text('unexpected UI')
