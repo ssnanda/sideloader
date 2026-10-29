@@ -176,6 +176,30 @@ def failed(output, rc=1, token=None):
     return status()
 
 
+
+def cancelled_2fa_timeout():
+    """Classify an expired, unanswered 2FA prompt as a local cancellation.
+
+    Keep signing paused pending explicit user resume; an Apple request already
+    happened, so this must never silently authorize another request. Do not
+    replace any specific Apple error already recorded by the child process.
+    """
+    with _mutex():
+        old = _read()
+        if old.get("account") != _identity():
+            return status()
+        if old.get("phase") not in ("running", "failed"):
+            return status()
+        if old.get("phase") == "failed" and old.get("code") != "install_failed":
+            return status()
+        _write({"account": _identity(), "blocked": True, "phase": "cancelled",
+                "code": "2fa_timeout", "reason": "user_cancelled",
+                "message": "Apple verification was not entered within 30 seconds. SideLoader cancelled the local signing process.",
+                "action": "No automatic retry. Confirm account access before explicitly permitting one new attempt.",
+                "since": old.get("since", int(time.time()))})
+    return status()
+
+
 def resume():
     with _mutex():
         # Called only through the explicit authenticated application API.
