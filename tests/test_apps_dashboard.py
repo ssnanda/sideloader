@@ -204,6 +204,16 @@ class DashboardPatchTests(unittest.TestCase):
             self.assertNotEqual(a.returncode,0)
             self.assertEqual((p/'server.py').read_text(),SERVER)
 
+    def test_install_job_dialog_and_sources_handoff(self):
+        patcher=(ROOT/'overlay'/'patch-apps-dashboard.py').read_text()
+        sources=(ROOT/'overlay'/'sources.html').read_text()
+        self.assertIn('await pullJob();',patcher)
+        self.assertIn('renderSheet();',patcher)
+        self.assertIn('Installation was not started:',patcher)
+        self.assertIn('sessionStorage.getItem("sideloaderPendingJob")',patcher)
+        self.assertIn("sessionStorage.setItem('sideloaderPendingJob'",sources)
+        self.assertIn("location.href='/#apps'",sources)
+
     def test_sideloaded_filter_defaults_on_and_preserves_selection(self):
         ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
         wire=(ROOT/'overlay'/'apps-dashboard-wire.js').read_text()
