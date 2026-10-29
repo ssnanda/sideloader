@@ -83,3 +83,8 @@ No Apple Account or real device sign-in is performed by the unit tests. This is 
 ## Persistent-checkout Apps migration hotfix (v0.2.0+26)
 
 Fixes `Apps dashboard patch inventory import: expected one anchor, got 3` after a local repeat build. The Apps overlay now inserts its inventory import beside the unique original Sideloop module import instead of relying on the number of earlier log-maintenance imports. It also recognizes an inventory import already present in another position. Added regression fixtures for repeated log imports, already imported inventory, repeat migrations and an unknown original import. This migration only rewrites application source in the ignored upstream checkout; saved `build/sideloop/data` IPAs, devices, credentials, and signing safety state remain untouched. Rebuild with `./bin/pull-latest.sh && ./bin/build-docker.sh`.
+
+
+## Repeat-build overlay hardening (v0.2.0+28)
+
+Fixed a persistent-checkout `Apps dashboard patch uninstall POST route: expected one anchor, got 4/5` failure and the analogous GET-route failure by finding the actual POST route dictionary and authenticated GET handler, rather than counting duplicated old log-route lines. Added a single inventory route even where older overlays left 3–10 duplicate logging entries. The Apple-verification, AltServer-backend, log-maintenance and Sideloop-version patchers now check for their own feature symbols before reinserting imports, methods or routes, preventing those overlays from repeatedly duplicating one another on every rebuild. Regression fixtures cover repeated logs and fail-closed handling of unrecognized server layout. No runtime IPA, pairing, Apple credential, or signing guard data is changed; no Apple sign-in is initiated.

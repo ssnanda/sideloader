@@ -20,23 +20,26 @@ def replace(text, old, new, label):
 
 
 s = server.read_text()
-s = replace(s,
-    "from . import retry_guard\nfrom .account import verification, save_account",
-    "from . import retry_guard\nfrom . import log_maintenance\nfrom .account import verification, save_account",
-    "server import")
-s = replace(s,
-    "    def signing_resume(self, data):",
-    "    def clear_activity_logs(self, data):\n"
-    "        if data.get('acknowledge') is not True:\n"
-    "            raise ValueError('Please confirm clearing the old Activity logs.')\n"
-    "        return log_maintenance.clear_history(self)\n\n"
-    "    def signing_resume(self, data):",
-    "clear handler")
-s = replace(s,
-    '            "/api/signing/resume": self.signing_resume,',
-    '            "/api/signing/resume": self.signing_resume,\n'
-    '            "/api/logs/clear": self.clear_activity_logs,',
-    "protected POST route")
+if 'from . import log_maintenance' not in s:
+    s = replace(s,
+        "from . import retry_guard\nfrom .account import verification, save_account",
+        "from . import retry_guard\nfrom . import log_maintenance\nfrom .account import verification, save_account",
+        "server import")
+if '    def clear_activity_logs(self, data):' not in s:
+    s = replace(s,
+        "    def signing_resume(self, data):",
+        "    def clear_activity_logs(self, data):\n"
+        "        if data.get('acknowledge') is not True:\n"
+        "            raise ValueError('Please confirm clearing the old Activity logs.')\n"
+        "        return log_maintenance.clear_history(self)\n\n"
+        "    def signing_resume(self, data):",
+        "clear handler")
+if '"/api/logs/clear": self.clear_activity_logs' not in s:
+    s = replace(s,
+        '            "/api/signing/resume": self.signing_resume,',
+        '            "/api/signing/resume": self.signing_resume,\n'
+        '            "/api/logs/clear": self.clear_activity_logs,',
+        "protected POST route")
 
 h = index.read_text()
 h = replace(h,

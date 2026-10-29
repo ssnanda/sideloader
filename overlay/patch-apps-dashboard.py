@@ -46,35 +46,43 @@ s = replace(s,
         return device_app_inventory.remove_apps(self, udid, data.get("bundles", []))
 
     def signing_resume(self, data):''', 'explicit uninstall handler')
-# Persistent upstream checkouts can contain several copies of the POST route
-# table due to previous overlays. Add the uninstall route beside every matching
-# clear-logs route, so the active table receives it regardless of which copy is
-# executed. Already-patched tables are left unchanged on subsequent builds.
-logs_route = '            "/api/logs/clear": self.clear_activity_logs,'
-remove_route = '            "/api/device/apps/remove": self.remove_phone_apps,'
-lines = s.splitlines(keepends=True)
-if not any(line.rstrip() == logs_route for line in lines) and remove_route not in s:
-    sys.exit('Apps dashboard patch uninstall POST route: missing anchor')
-patched_lines = []
-for i, line in enumerate(lines):
-    patched_lines.append(line)
-    if line.rstrip() == logs_route:
-        following = lines[i + 1].rstrip() if i + 1 < len(lines) else ''
-        if following != remove_route:
-            patched_lines.append(remove_route + '\n')
-s = ''.join(patched_lines)
-s = replace(s,
-            '            if path == "/api/logs":\n                return self.send(200, app.logs())',
-            '''            if path == "/api/logs":
-                return self.send(200, app.logs())
-            if path == "/api/device/apps":
+# Locate the active routes() and do_GET() structurally. Older builds may
+# contain duplicate log route entries from interacting overlays; do not add an
+# inventory route per duplicate or rely on the number of log anchors.
+def insert_scoped(source, start, end, anchor, addition, present, label, after=False):
+    if source.count(start) != 1 or source.count(end) != 1:
+        sys.exit(f'Apps dashboard patch {label}: ambiguous handler boundaries')
+    a = source.index(start)
+    b = source.index(end, a + len(start))
+    section = source[a:b]
+    if present in section:
+        return source
+    if section.count(anchor) != 1:
+        sys.exit(f'Apps dashboard patch {label}: expected one insertion boundary, got {section.count(anchor)}')
+    section = section.replace(anchor, anchor + addition if after else addition + anchor, 1)
+    return source[:a] + section + source[b:]
+
+
+s = insert_scoped(
+    s, '    def routes(self):', '\n\ndef handler(app):',
+    '        return {\n',
+    '            "/api/device/apps/remove": self.remove_phone_apps,\n',
+    '"/api/device/apps/remove": self.remove_phone_apps',
+    'uninstall POST route', after=True)
+s = insert_scoped(
+    s, '        def do_GET(self):', '        def do_POST(self):',
+    '            self.error(404, "not found")',
+    '''            if path == "/api/device/apps":
                 udid = app.device({"device": urllib.parse.parse_qs(query).get("device", [""])[0]})
                 if not udid:
                     return self.error(400, "Select a registered iPhone")
                 try:
                     return self.send(200, {"apps": device_app_inventory.inventory(udid)})
                 except (RuntimeError, ValueError) as e:
-                    return self.error(409, str(e))''', 'protected read-only inventory GET')
+                    return self.error(409, str(e))
+''',
+    'if path == "/api/device/apps":',
+    'protected read-only inventory GET')
 
 if marker not in h:
     step3_start = h.find('${renderSetupStep(3, "Add an IPA"')
@@ -82,28 +90,18 @@ if marker not in h:
     ending = ', expanded)}'
     if step3_start < 0 or step4_start < 0:
         sys.exit('Apps dashboard patch: cannot locate installed four-step wizard')
-    # Earlier overlays may reformat the closing expression and nested
-    # templates can contain similar text. Bound each search to its step.
-    import re
-    after_step4 = h.find('${sideloopCoreCard()}', step4_start)
-    if after_step4 < 0:
-        sys.exit('Apps dashboard patch: cannot locate wizard footer')
-    closing_pattern = re.compile(r',\\s*expanded\\s*\\)\\s*\\}')
-    closing3 = list(closing_pattern.finditer(h, step3_start, step4_start))
-    closing4 = list(closing_pattern.finditer(h, step4_start, after_step4))
-    if not closing3 or not closing4:
-        sys.exit('Apps dashboard patch: unexpected wizard template closing '
-                 f'(step3={len(closing3)}, step4={len(closing4)})')
-    step3_end = closing3[-1].end()
-    step4_end = closing4[-1].end()
+    step3_end = h.find(ending, step3_start, step4_start)
+    step4_end = h.find(ending, step4_start)
+    if step3_end < 0 or step4_end < 0:
+        sys.exit('Apps dashboard patch: unexpected wizard template closing')
+    step3_end += len(ending)
+    step4_end += len(ending)
     old3 = h[step3_start:step3_end]
     old4 = h[step4_start:step4_end]
     if ('id="recheck"' not in old4 or 'data-sign=' not in old4 or
             'step-source' not in old3):
         sys.exit('Apps dashboard patch: previous install/import controls differ; refusing migration')
-    open3 = old3.find(', `')
-    close3_match = list(closing_pattern.finditer(old3))
-    close3 = old3.rfind('`', 0, close3_match[-1].start()) if close3_match else -1
+    open3, close3 = old3.find(', `'), old3.rfind('`, expanded)}')
     if open3 < 0 or close3 < open3:
         sys.exit('Apps dashboard patch: cannot retain IPA import controls')
     import_body = old3[open3 + 3:close3]

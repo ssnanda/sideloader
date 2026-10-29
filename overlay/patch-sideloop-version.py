@@ -46,11 +46,12 @@ manifest = {
 (package / "sideloop-build.json").write_text(json.dumps(manifest, sort_keys=True) + "\n")
 
 server = package / "server.py"
-replace(server,
-        'from .backend_info import status as altserver_status, check_updates as altserver_updates',
-        'from .backend_info import status as altserver_status, check_updates as altserver_updates\n'
-        'from .sideloop_info import status as sideloop_status',
-        "server import")
+if 'from .sideloop_info import status as sideloop_status' not in server.read_text():
+    replace(server,
+            'from .backend_info import status as altserver_status, check_updates as altserver_updates',
+            'from .backend_info import status as altserver_status, check_updates as altserver_updates\n'
+            'from .sideloop_info import status as sideloop_status',
+            "server import")
 replace(server,
         '            "altserver_build": altserver_status(),',
         '            "altserver_build": altserver_status(),\n'

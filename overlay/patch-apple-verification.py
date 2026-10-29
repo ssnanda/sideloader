@@ -19,10 +19,11 @@ def replace(path, before, after, label):
 
 
 server = root / "sideloop" / "server.py"
-replace(server,
-    "from . import retry_guard",
-    "from . import retry_guard\nfrom .account import verification, save_account",
-    "account imports")
+if 'from .account import verification, save_account' not in server.read_text():
+    replace(server,
+        "from . import retry_guard",
+        "from . import retry_guard\nfrom .account import verification, save_account",
+        "account imports")
 replace(server,
     '            "signing_guard": retry_guard.status(),',
     '            "signing_guard": retry_guard.status(),\n'

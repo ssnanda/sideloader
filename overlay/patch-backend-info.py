@@ -51,10 +51,11 @@ replace(docker,
 
 
 server = package / "server.py"
-replace(server,
-        "from .account import verification, save_account",
-        "from .account import verification, save_account\nfrom .backend_info import status as altserver_status, check_updates as altserver_updates",
-        "backend inspector import")
+if 'from .backend_info import status as altserver_status, check_updates as altserver_updates' not in server.read_text():
+    replace(server,
+            "from .account import verification, save_account",
+            "from .account import verification, save_account\nfrom .backend_info import status as altserver_status, check_updates as altserver_updates",
+            "backend inspector import")
 replace(server,
         '            "account_verification": verification(),',
         '            "account_verification": verification(),\n'
@@ -70,17 +71,19 @@ replace(refresh,
     'log "Apple Account passed to AltServer (-a): ${APPLE_ID}"',
     "runtime signing identity in log")
 
-replace(server,
-        '    def signing_resume(self, data):',
-        '    def altserver_check_updates(self, data):\n'
-        '        return altserver_updates()\n\n'
-        '    def signing_resume(self, data):',
-        "read-only update check API")
-replace(server,
-        '            "/api/signing/resume": self.signing_resume,',
-        '            "/api/signing/resume": self.signing_resume,\n'
-        '            "/api/altserver/check-updates": self.altserver_check_updates,',
-        "update check route")
+if '    def altserver_check_updates(self, data):' not in server.read_text():
+    replace(server,
+            '    def signing_resume(self, data):',
+            '    def altserver_check_updates(self, data):\n'
+            '        return altserver_updates()\n\n'
+            '    def signing_resume(self, data):',
+            "read-only update check API")
+if '"/api/altserver/check-updates": self.altserver_check_updates' not in server.read_text():
+    replace(server,
+            '            "/api/signing/resume": self.signing_resume,',
+            '            "/api/signing/resume": self.signing_resume,\n'
+            '            "/api/altserver/check-updates": self.altserver_check_updates,',
+            "update check route")
 
 index = package / "index.html"
 marker = "/* SideLoader backend provenance display v1 */"
