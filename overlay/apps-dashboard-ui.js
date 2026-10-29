@@ -2,6 +2,14 @@
 let deviceAppTarget = null;
 let deviceAppRows = [], deviceAppSelected = new Set(), deviceAppScannedFor = null;
 let deviceAppBusy = false, deviceAppError = "";
+let deviceAppSideloadedOnly = true;
+
+// Not every sideloaded app carries a readable signer identity in iOS inventory.
+// Show confirmed developer-signed apps plus IPAs known to SideLoader by default.
+// Keep unknown-origin apps accessible with the filter unchecked.
+function deviceAppIsSideloaded(row) {
+  return Boolean(row.managed || row.origin === "Developer signed (reported)");
+}
 
 function sideLoaderVersionStrip() {
   const core = S.sideloop_build || {};
@@ -41,7 +49,8 @@ function deviceAppsManager() {
     result.set(app.bundle_id, {bundle_id:app.bundle_id, name:app.name, version:app.version,
       origin:"IPA saved in SideLoader", installed:false, managed:app});
   }
-  const rows = [...result.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  const allRows = [...result.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  const rows = deviceAppSideloadedOnly ? allRows.filter(deviceAppIsSideloaded) : allRows;
   const removed = scanned ? deviceAppRows.filter(a => !deviceAppSelected.has(a.bundle_id)).length : 0;
   const addable = scanned ? rows.filter(a => !a.installed && a.managed && deviceAppSelected.has(a.bundle_id)).length : 0;
   const busy = deviceAppBusy || Boolean(S.job?.running || S.watcher?.running);
@@ -53,9 +62,10 @@ function deviceAppsManager() {
       <button type="button" class="cap" id="sideloader-device-app-scan" ${busy?"disabled":""}>${deviceAppBusy?"Scanning…":"Scan apps"}</button>
       <button type="button" class="cap solid" id="sideloader-device-app-sync" ${!scanned||busy||!(removed||addable)?"disabled":""}>Sync selection</button>
     </div>
-    <div class="foot sl-app-help">Scan lists user-installed apps, including apps installed by Xcode. It may also include App Store apps; iOS doesn't always identify their origin. Checked = keep on phone; unchecked = propose removal. Select one missing imported IPA to install via AltServer. No Apple login during scanning or removal.</div>
+    <label class="sl-app-filter"><input type="checkbox" id="sideloader-sideloaded-only" ${deviceAppSideloadedOnly?"checked":""}> Sideloaded only</label>
+    <div class="foot sl-app-help">Shows identified developer-signed apps and IPAs saved in SideLoader by default. iOS may not report the origin of other sideloaded apps; uncheck to see every app. The row checkboxes still control keep/remove selections, not this filter. No Apple login during scanning.</div>
     ${deviceAppError?`<div class="foot" style="color:var(--red)">${esc(deviceAppError)}</div>`:""}
-    ${scanned?`<div class="sl-app-count">${deviceAppRows.length} found on iPhone · ${removed} selected for removal · ${addable} selected for installation</div>`:
+    ${scanned?`<div class="sl-app-count">${rows.length} shown of ${allRows.length} · ${deviceAppRows.length} found on iPhone · ${removed} selected for removal · ${addable} selected for installation</div>`:
       `<div class="sl-app-count">Scan iPhone to compare installed apps and stored IPAs.</div>`}
     <div class="list sl-app-list">${rows.map(row=>{
       const selected = scanned ? deviceAppSelected.has(row.bundle_id) : false;
@@ -67,7 +77,7 @@ function deviceAppsManager() {
         <span class="sl-app-detail"><b>${esc(row.name)}</b><small>${esc(row.bundle_id)}${row.version?" · "+esc(row.version):""}</small><small>${esc(subtitle)}</small></span>
         <button type="button" class="cap ${row.installed?"":"solid"}" data-device-app-action="${esc(row.bundle_id)}" ${disabled?"disabled":""}>${button}</button>
       </div>`;
-    }).join("") || `<div class="cell">No saved IPAs or scanned apps to display.</div>`}</div>
+    }).join("") || `<div class="cell">${deviceAppSideloadedOnly?"No identified sideloaded apps. Uncheck Sideloaded only to show all.":"No saved IPAs or scanned apps to display."}</div>`}</div>
     ${blocked?`<div class="foot" style="color:var(--red)">Apple signing is paused. Scanning and removal still work; Install and Re-sign stay blocked.</div>`:""}
   </div>`;
 }
