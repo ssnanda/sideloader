@@ -107,6 +107,8 @@ class TwoFactorTests(unittest.TestCase):
         pkg=self.patched()
         self.assertEqual(before,[(pkg/'jobs.py').read_text(),(pkg/'index.html').read_text()])
         self.assertIn('pattern="[0-9]{6}"',before[1])
+        self.assertIn('only prompt when verification input is requested', PATCHER.read_text())
+        self.assertIn('enter|type|provide', before[0])
         self.assertIn('button.disabled = true',before[1])
         self.assertIn('input.value = ""',before[1])
         self.assertNotIn('AltServer',before[0])
@@ -137,6 +139,8 @@ class TwoFactorTests(unittest.TestCase):
             for invalid in ('12','12345','1234567','abcdef','12 3456','12345\nmore'):
                 with self.assertRaises(ValueError): job.send(invalid)
             with self.assertRaises(RuntimeError):job.send('123456')
+            job.add('Apple already sent a verification code to trusted devices (hsc 409).\n')
+            self.assertFalse(job.needs_input)
             job.add('Enter verification code: ')
             self.assertTrue(job.needs_input)
             job.send('123456')
