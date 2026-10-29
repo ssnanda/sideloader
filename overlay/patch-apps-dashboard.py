@@ -189,6 +189,55 @@ else:
     if '.sl-app-filter{' not in h:
         h = replace(h, '</style>', filter_css + '</style>', 'filter CSS migration')
 
+# Route every install through the existing job sheet, even if Apple rejects it
+# before the ordinary 1.5-second polling interval. Sources carries its job ID
+# in sessionStorage during the same-tab navigation back to Apps.
+old_start = 'function startJob(path, body={}) { return act(async () => { const r = await api(path, {json: body}); if (r.job) watched.add(r.job); }); }'
+new_start = '''async function startJob(path, body={}) {
+  try {
+    const r = await api(path, {json:body});
+    if (!r.job) throw new Error("Install did not return a signing job");
+    watched.add(r.job);
+    dismissedJob = null;
+    await refresh();
+    if (S.job?.id === r.job) {
+      await pullJob();
+      render();
+      renderSheet();
+    } else {
+      await poll();
+    }
+  } catch (e) {
+    // A signing lock or setup error must be shown, not lost in a toast.
+    window.alert("Installation was not started: " + e.message);
+    await poll();
+  }
+}'''
+if old_start in h:
+    h = h.replace(old_start, new_start, 1)
+elif new_start not in h:
+    sys.exit('Apps dashboard patch: unrecognized install job launcher')
+
+# Boot can occur after a Sources installation has already finished, so the
+# completed job must still be watched to show its result.
+old_boot = '  await refresh();\n  if (!S.configured) view = "apps";'
+new_boot = '''  await refresh();
+  let pendingSourceJob = null;
+  try {
+    pendingSourceJob = sessionStorage.getItem("sideloaderPendingJob");
+    sessionStorage.removeItem("sideloaderPendingJob");
+  } catch {}
+  if (pendingSourceJob) {
+    watched.add(pendingSourceJob);
+    dismissedJob = null;
+    view = "apps";
+  }
+  if (!S.configured) view = "apps";'''
+if old_boot in h:
+    h = h.replace(old_boot, new_boot, 1)
+elif new_boot not in h:
+    sys.exit('Apps dashboard patch: unrecognized boot method for Sources handoff')
+
 # Only commit when ALL validation and transformations succeed.
 server.write_text(s)
 index.write_text(h)
