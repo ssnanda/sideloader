@@ -19,6 +19,20 @@ jobs, page = job_file.read_text(), page_file.read_text()
 def change(source, old, new, label):
     if new in source:
         return source
+    # Version +33 added a verification_deadline reset inside the previously
+    # hardened send() method. Its original full replacement is no longer a
+    # contiguous substring, even though all validation is present. Recognize
+    # that exact upgraded structure instead of trying to patch it twice.
+    if label == 'validate and serialize one 2FA submission':
+        safe_send = (
+            'def send(self, text):' in source
+            and 'if not re.fullmatch(r"[0-9]{6}", code):' in source
+            and 'if self.kind != "refresh" or not self.running or self.fd is None or not self.needs_input:' in source
+            and 'self.lines.append("Apple verification code submitted [redacted]")' in source
+            and 'os.write(fd, (code + "\\n").encode())' in source
+        )
+        if safe_send:
+            return source
     matches = source.count(old)
     if matches != 1:
         sys.exit(f'2FA safety patch {label}: expected 1 anchor, found {matches}')
