@@ -53,15 +53,15 @@ s = replace(s,
 logs_route = '            "/api/logs/clear": self.clear_activity_logs,'
 remove_route = '            "/api/device/apps/remove": self.remove_phone_apps,'
 lines = s.splitlines(keepends=True)
-if not any(line.rstrip('\\r\\n') == logs_route for line in lines) and remove_route not in s:
+if not any(line.rstrip() == logs_route for line in lines) and remove_route not in s:
     sys.exit('Apps dashboard patch uninstall POST route: missing anchor')
 patched_lines = []
 for i, line in enumerate(lines):
     patched_lines.append(line)
-    if line.rstrip('\\r\\n') == logs_route:
-        following = lines[i + 1].rstrip('\\r\\n') if i + 1 < len(lines) else ''
+    if line.rstrip() == logs_route:
+        following = lines[i + 1].rstrip() if i + 1 < len(lines) else ''
         if following != remove_route:
-            patched_lines.append(remove_route + '\\n')
+            patched_lines.append(remove_route + '\n')
 s = ''.join(patched_lines)
 s = replace(s,
             '            if path == "/api/logs":\n                return self.send(200, app.logs())',
