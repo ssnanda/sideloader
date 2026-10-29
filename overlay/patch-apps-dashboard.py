@@ -159,6 +159,36 @@ if marker not in h:
     css = (overlays / 'apps-dashboard.css').read_text()
     h = replace(h, '</style>', css + '\n</style>', 'compact responsive styling')
 
+# Refresh Apps manager code inside a persistent, already unified dashboard.
+# Without this migration, the marker above skips the new UI on future builds.
+else:
+    current_ui = (overlays / 'apps-dashboard-ui.js').read_text()
+    start = h.find(marker)
+    end = h.find('\nfunction settingsView() {', start)
+    if start < 0 or end < 0 or h.count(marker) != 1:
+        sys.exit('Apps dashboard patch: cannot safely refresh existing Apps helper')
+    previous_ui = h[start:end].rstrip('\n')
+    if 'function deviceAppsManager()' not in previous_ui:
+        sys.exit('Apps dashboard patch: unrecognized existing Apps helper')
+    h = h[:start] + current_ui.rstrip('\n') + h[end:]
+
+    # Keep the existing event wiring and add only the new filter event.
+    filter_event = '  on("sideloader-sideloaded-only", "onchange", e => {'
+    if filter_event not in h:
+        scan_event = '  on("sideloader-device-app-scan", "onclick", () => {'
+        if h.count(scan_event) != 1:
+            sys.exit('Apps dashboard patch: cannot locate scan handler for filter migration')
+        h = h.replace(scan_event,
+            '''  on("sideloader-sideloaded-only", "onchange", e => {
+    deviceAppSideloadedOnly = e.target.checked;
+    render();
+  });
+''' + scan_event, 1)
+    css = (overlays / 'apps-dashboard.css').read_text()
+    filter_css = '\n.sl-app-filter{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;padding:8px 2px;cursor:pointer;}\n.sl-app-filter input{width:18px;height:18px;accent-color:var(--blue);}\n'
+    if '.sl-app-filter{' not in h:
+        h = replace(h, '</style>', filter_css + '</style>', 'filter CSS migration')
+
 # Only commit when ALL validation and transformations succeed.
 server.write_text(s)
 index.write_text(h)
