@@ -74,10 +74,18 @@ replace(index,
     '''  const appleInfo = S.account_verification || {};
   const appleDone = Boolean(c.apple_id && c.has_password && appleInfo.state === "verified");''',
     "Step 2 completion must be verified")
-replace(index,
-    'appleDone ? "Credentials saved · not verified with Apple" : "Enter account and password"',
-    '''appleDone ? `Verified by successful install · ${new Date(appleInfo.verified_at * 1000).toLocaleString()}` : c.apple_id && c.has_password ? (appleInfo.state === "failed" ? `Apple authentication failed (${appleInfo.code || "unknown"}) · retry paused` : "Credentials saved · Apple sign-in not yet verified") : "Enter account and password"''',
-    "Step 2 exact status")
+# An existing unified Apps dashboard deliberately uses a shorter Step 2
+# subtitle, but still depends on the verified Apple account state. Never
+# regress that newer layout or require the original pre-migration caption.
+page = index.read_text()
+compact_step2 = ('/* SideLoader unified iPhone Apps step v1 */' in page
+                 and '${renderSetupStep(2, "Apple Account", appleDone ? "Verified"' in page
+                 and 'appleInfo.state === "failed"' in page)
+if not compact_step2:
+    replace(index,
+        'appleDone ? "Credentials saved · not verified with Apple" : "Enter account and password"',
+        '''appleDone ? `Verified by successful install · ${new Date(appleInfo.verified_at * 1000).toLocaleString()}` : c.apple_id && c.has_password ? (appleInfo.state === "failed" ? `Apple authentication failed (${appleInfo.code || "unknown"}) · retry paused` : "Credentials saved · Apple sign-in not yet verified") : "Enter account and password"''',
+        "Step 2 exact status")
 replace(index,
     '<button class="cell action">Save</button>',
     '<button class="cell action">Save credentials</button>',
