@@ -204,6 +204,12 @@ class DashboardPatchTests(unittest.TestCase):
             self.assertNotEqual(a.returncode,0)
             self.assertEqual((p/'server.py').read_text(),SERVER)
 
+    def test_install_click_explains_signing_lock_without_starting_apple_request(self):
+        ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
+        self.assertIn('if (S.signing_guard?.blocked) return window.alert(', ui)
+        self.assertIn('No new Apple sign-in was started.', ui)
+        self.assertNotIn('Boolean(row.managed) && blocked', ui)
+
     def test_install_job_dialog_and_sources_handoff(self):
         patcher=(ROOT/'overlay'/'patch-apps-dashboard.py').read_text()
         sources=(ROOT/'overlay'/'sources.html').read_text()
