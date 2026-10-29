@@ -46,10 +46,19 @@ s = replace(s,
         return device_app_inventory.remove_apps(self, udid, data.get("bundles", []))
 
     def signing_resume(self, data):''', 'explicit uninstall handler')
-s = replace(s, '            "/api/logs/clear": self.clear_activity_logs,',
-            '            "/api/logs/clear": self.clear_activity_logs,\n'
-            '            "/api/device/apps/remove": self.remove_phone_apps,',
-            'uninstall POST route')
+# Persistent upstream checkouts can contain several copies of the POST route
+# table due to previous overlays. Add the uninstall route beside every matching
+# clear-logs route, so the active table receives it regardless of which copy is
+# executed. Already-patched tables are left unchanged on subsequent builds.
+logs_route = '            "/api/logs/clear": self.clear_activity_logs,'
+remove_route = '            "/api/device/apps/remove": self.remove_phone_apps,'
+if logs_route not in s:
+    if remove_route not in s:
+        sys.exit('Apps dashboard patch uninstall POST route: missing anchor')
+else:
+    s = s.replace(logs_route + '\n' + remove_route, remove_route + '\n' + logs_route)
+    s = s.replace(logs_route, logs_route + '\n' + remove_route)
+    s = s.replace(remove_route + '\n' + logs_route, logs_route + '\n' + remove_route)
 s = replace(s,
             '            if path == "/api/logs":\n                return self.send(200, app.logs())',
             '''            if path == "/api/logs":
