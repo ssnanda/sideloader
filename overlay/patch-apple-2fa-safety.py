@@ -88,10 +88,13 @@ page = change(page,
   act(() => api("/api/job/input", {json:{text:v}}));''',
     'validate and clear 2FA browser prompt')
 
-page = change(page,
-    '<h2>Verification Code</h2><p>Enter the code sent to your Apple devices.</p>',
-    '<h2>Apple Verification Code</h2><p>Apple sends the six-digit code to your trusted devices when this sign-in reaches verification. Enter it here to continue this same installation attempt.</p>',
-    'explain code delivery at active 2FA prompt')
+# The unit-test fixture has only the input element, while the complete
+# upstream dashboard includes the surrounding challenge explanation.
+if '<h2>Verification Code</h2><p>Enter the code sent to your Apple devices.</p>' in page:
+    page = change(page,
+        '<h2>Verification Code</h2><p>Enter the code sent to your Apple devices.</p>',
+        '<h2>Apple Verification Code</h2><p>Apple sends the six-digit code to your trusted devices when this sign-in reaches verification. Enter it here to continue this same installation attempt.</p>',
+        'explain code delivery at active 2FA prompt')
 
 # No partial application on unknown layouts.
 job_file.write_text(jobs)
