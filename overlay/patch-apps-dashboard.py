@@ -90,18 +90,27 @@ if marker not in h:
     ending = ', expanded)}'
     if step3_start < 0 or step4_start < 0:
         sys.exit('Apps dashboard patch: cannot locate installed four-step wizard')
-    step3_end = h.find(ending, step3_start, step4_start)
-    step4_end = h.find(ending, step4_start)
-    if step3_end < 0 or step4_end < 0:
-        sys.exit('Apps dashboard patch: unexpected wizard template closing')
-    step3_end += len(ending)
-    step4_end += len(ending)
+    # Accept whitespace variants in the closing expression while keeping
+    # each match within its own wizard step.
+    import re
+    closing_pattern = re.compile(r',\s*expanded\s*\)\s*\}')
+    footer = h.find('${sideloopCoreCard()}', step4_start)
+    if footer < 0:
+        sys.exit('Apps dashboard patch: cannot locate wizard footer')
+    closing3 = list(closing_pattern.finditer(h, step3_start, step4_start))
+    closing4 = list(closing_pattern.finditer(h, step4_start, footer))
+    if not closing3 or not closing4:
+        sys.exit('Apps dashboard patch: unexpected wizard template closing '
+                 f'(step3={len(closing3)}, step4={len(closing4)})')
+    step3_end = closing3[-1].end()
+    step4_end = closing4[-1].end()
     old3 = h[step3_start:step3_end]
     old4 = h[step4_start:step4_end]
     if ('id="recheck"' not in old4 or 'data-sign=' not in old4 or
             'step-source' not in old3):
         sys.exit('Apps dashboard patch: previous install/import controls differ; refusing migration')
-    open3, close3 = old3.find(', `'), old3.rfind('`, expanded)}')
+    open3 = old3.find(', `')
+    close3 = old3.rfind('`', 0, closing3[-1].start() - step3_start)
     if open3 < 0 or close3 < open3:
         sys.exit('Apps dashboard patch: cannot retain IPA import controls')
     import_body = old3[open3 + 3:close3]
