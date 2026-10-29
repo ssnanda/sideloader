@@ -105,16 +105,28 @@ new_warning = 'return `${S.signing_guard?.blocked && (S.signing_guard.code !== "
 source = index.read_text()
 if old_warning in source:
     index.write_text(source.replace(old_warning, new_warning, 1))
-replace(index,
-    'return `${settingsView()}${autoCard}${issues.map(',
-    '''return `${S.signing_guard?.blocked && (S.signing_guard.code !== "attempt_in_progress" || !S.job?.running) ? `<div class="sect" style="border:1px solid #c93434;padding:14px;border-radius:12px">
-  <div style="font-weight:700;color:#c93434">Signing paused — no automatic retries</div>
-  <p style="margin:8px 0">${esc(S.signing_guard.message || "The previous signing/install attempt failed.")}</p>
-  <p style="margin:8px 0">${esc(S.signing_guard.action || "Review Activity and Copy Diagnostics.")}</p>
-  <small>Code: ${esc(S.signing_guard.code || "unknown")} · Last failure ${new Date((S.signing_guard.since || 0)*1000).toLocaleString()}</small>
-  <button type="button" class="cell action" id="sideloader-resume" style="margin-top:10px">Issue resolved — allow one new attempt</button>
-</div>` : ""}${settingsView()}${autoCard}${issues.map(''',
-    "visible signing status")
+# On a persistent checkout, the banner was installed on an earlier build.
+# It may have since acquired a running-state guard and timeout text. Treat
+# that as an existing installation rather than demanding the original anchor.
+page = index.read_text()
+already_has_banner = (
+    'S.signing_guard?.blocked' in page
+    and 'sideloader-resume' in page
+    and 'Signing paused — no automatic retries' in page
+    and 'S.signing_guard.message' in page
+)
+if not already_has_banner:
+    replace(index,
+        'return `${settingsView()}${autoCard}${issues.map(',
+        '''return `${S.signing_guard?.blocked && (S.signing_guard.code !== "attempt_in_progress" || !S.job?.running) ? `<div class="sect" style="border:1px solid #c93434;padding:14px;border-radius:12px">
+      <div style="font-weight:700;color:#c93434">Signing paused — no automatic retries</div>
+      <p style="margin:8px 0">${esc(S.signing_guard.message || "The previous signing/install attempt failed.")}</p>
+      <p style="margin:8px 0">${esc(S.signing_guard.action || "Review Activity and Copy Diagnostics.")}</p>
+      <small>Code: ${esc(S.signing_guard.code || "unknown")} · Last failure ${new Date((S.signing_guard.since || 0)*1000).toLocaleString()}</small>
+      <button type="button" class="cell action" id="sideloader-resume" style="margin-top:10px">Issue resolved — allow one new attempt</button>
+    </div>` : ""}${settingsView()}${autoCard}${issues.map(''',
+        "visible signing status")
+
 replace(index,
     '  on("sideloader-remove-account", "onclick",',
     '''  if (S.signing_guard?.blocked) {
