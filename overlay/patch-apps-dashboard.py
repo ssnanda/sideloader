@@ -238,6 +238,20 @@ if old_boot in h:
 elif new_boot not in h:
     sys.exit('Apps dashboard patch: unrecognized boot method for Sources handoff')
 
+# Load source apps automatically after authentication; keep Sources as a
+# list manager and put every IPA import/install action in Apps Step 3.
+boot_start = h.find('async function boot() {')
+boot_end = h.find('\nfunction renderAuth(', boot_start)
+if boot_start < 0 or boot_end < 0:
+    sys.exit('Apps dashboard patch: cannot find authenticated boot')
+boot = h[boot_start:boot_end]
+load_catalog = '  if (!sourceCatalogLoaded && !sourceCatalogBusy) loadSourceCatalog();'
+if load_catalog not in boot:
+    if boot.count('  render(); poll();') != 1:
+        sys.exit('Apps dashboard patch: cannot wire source catalog boot')
+    boot = boot.replace('  render(); poll();', '  render(); poll();\n' + load_catalog, 1)
+    h = h[:boot_start] + boot + h[boot_end:]
+
 # Only commit when ALL validation and transformations succeed.
 server.write_text(s)
 index.write_text(h)
