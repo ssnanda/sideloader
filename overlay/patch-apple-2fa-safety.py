@@ -158,6 +158,11 @@ if 'def run_pty(job, argv):' in jobs:
                 break
             if select.select([fd], [], [], 0.5)[0]:''',
         'stop PTY on expired verification deadline')
+    # Do not relabel a deliberate timeout as an AltServer failure.
+    jobs = change(jobs,
+        '    if job.rc and argv and argv[0] == "refresh.sh" and "--recheck" not in argv:',
+        '    if job.rc and not job.timed_out_2fa and argv and argv[0] == "refresh.sh" and "--recheck" not in argv:',
+        'keep cancellation separate from signing errors')
     # The shell's PTY path does not write AltServer's interactive errors into
     # its temporary output file. Preserve explicit Apple errors captured by
     # Job.lines instead of leaving the generic "install_failed" classification.
@@ -171,11 +176,6 @@ if 'def run_pty(job, argv):' in jobs:
             retry_guard.failed(terminal, job.rc or 1)''',
         'preserve explicit Apple sign-in errors from PTY')
 
-    # Do not relabel a deliberate timeout as an AltServer failure.
-    jobs = change(jobs,
-        '    if job.rc and argv and argv[0] == "refresh.sh" and "--recheck" not in argv:',
-        '    if job.rc and not job.timed_out_2fa and argv and argv[0] == "refresh.sh" and "--recheck" not in argv:',
-        'keep cancellation separate from signing errors')
     jobs = change(jobs,
         '                "needs_input": self.needs_input, "accepts_input": self.fd is not None,',
         '                "needs_input": self.needs_input, "accepts_input": self.fd is not None,\n'
