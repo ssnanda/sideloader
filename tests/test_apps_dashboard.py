@@ -214,6 +214,27 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertIn('deviceAppSideloadedOnly = e.target.checked', wire)
         self.assertIn('const removed = deviceAppRows.filter', wire)
 
+    def test_existing_dashboard_refreshes_filter_on_rebuild(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=self.setup(tmp)
+            first=self.run_patch(tmp)
+            self.assertEqual(first.returncode,0,first.stderr+first.stdout)
+            index=p/'index.html'
+            original=index.read_text()
+            self.assertIn('let deviceAppSideloadedOnly = true;',original)
+            index.write_text(original.replace(
+                'let deviceAppSideloadedOnly = true;',
+                'let deviceAppSideloadedOnly = false;',1))
+            second=self.run_patch(tmp)
+            self.assertEqual(second.returncode,0,second.stderr+second.stdout)
+            migrated=index.read_text()
+            self.assertIn('let deviceAppSideloadedOnly = true;',migrated)
+            self.assertEqual(migrated.count('id="sideloader-sideloaded-only"'),1)
+            self.assertEqual(migrated.count('on("sideloader-sideloaded-only"'),1)
+            third=self.run_patch(tmp)
+            self.assertEqual(third.returncode,0,third.stderr+third.stdout)
+            self.assertEqual(migrated,index.read_text())
+
     def test_frontend_helper_javascript_syntax(self):
         if subprocess.run(['which','node'],capture_output=True).returncode: self.skipTest('node missing')
         src=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
