@@ -163,6 +163,16 @@ class DashboardPatchTests(unittest.TestCase):
             self.assertEqual((p/'server.py').read_text(), invalid)
             self.assertEqual((p/'index.html').read_text(), PAGE)
 
+    def test_wizard_step_closing_whitespace_variants(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self.setup(tmp)
+            (p/'index.html').write_text(PAGE.replace(', expanded)}', ',  expanded  ) }'))
+            result = self.run_patch(tmp)
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            self.assertIn('renderSetupStep(3, "Apps"', (p/'index.html').read_text())
+            again = self.run_patch(tmp)
+            self.assertEqual(again.returncode, 0, again.stderr + again.stdout)
+
     def test_existing_inventory_import_in_other_position_is_not_duplicated(self):
         with tempfile.TemporaryDirectory() as tmp:
             p=self.setup(tmp)
