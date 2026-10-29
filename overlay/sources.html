@@ -38,7 +38,7 @@ input{font-size:16px}
 }
 @media(max-width:350px){.app{flex-wrap:wrap}.app button{margin-left:auto}}
 </style>
-</head><body><main><header><h1>Sources</h1></header><p>Paste an existing AltStore / SideStore Classic JSON source URL. IPA downloads stay at their existing hosted locations. The first import saves a copy for future Wi-Fi refreshes.</p>
+</head><body><main><header><h1>Sources</h1></header><p>Paste an existing AltStore / SideStore Classic JSON source URL. IPA downloads stay at their existing hosted locations. App selection and installation are handled in the Apps tab.</p>
 <form id="add"><input id="url" type="url" placeholder="https://example.com/apps.json" required aria-label="AltStore source URL"><button>Add source</button></form>
 <section id="github-discovery"><div class="heading"><strong>Discover from GitHub</strong></div>
 <p>Paste a GitHub profile. Scan public repositories and accessible private repositories for altstore.json (including nested folders). Existing sources are skipped.</p>
@@ -48,7 +48,7 @@ input{font-size:16px}
 <div id="github-credential-status" class="status" role="status">Checking GitHub access…</div>
 <div id="github-scan-result" class="status" role="status" style="margin-top:8px">No scan performed yet.</div>
 <button id="github-disconnect" type="button" class="remove" hidden>Forget saved GitHub token</button>
-<small>To scan private repositories, create a fine-grained personal access token with read-only Contents permission. Enter tokens only using localhost or HTTPS. The token remains on this server, never in source URLs.</small></section><div id="status" class="status" role="status">Loading sources…</div><div id="sources"></div><p>Up to three installed apps per free Apple account. New versions from source require selecting Update; existing installed copies are automatically renewed by Sideloop. <a href="/">Manage devices and renewal settings</a>.</p></main>
+<small>To scan private repositories, create a fine-grained personal access token with read-only Contents permission. Enter tokens only using localhost or HTTPS. The token remains on this server, never in source URLs.</small></section><div id="status" class="status" role="status">Loading sources…</div><div id="sources"></div><p>Sources manages source lists. Browse and import apps from the <a href="/#apps">Apps tab</a>. Importing an IPA does not mean it is installed on your iPhone.</p></main>
 <nav class="sources-tabs" aria-label="Primary navigation">
   <a href="/#apps">Apps</a>
   <a href="/sources" aria-current="page">Sources</a>
@@ -60,9 +60,26 @@ let busy=false;
 function node(tag,text,css){const x=document.createElement(tag);if(text!==undefined)x.textContent=text;if(css)x.className=css;return x}
 async function api(path,body){const res=await fetch(path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Requested-With':'sideloop'},credentials:'same-origin',body:body?JSON.stringify(body):undefined});const data=await res.json();if(!res.ok)throw Error(data.error||`HTTP ${res.status}`);return data}
 async function work(label,fn){if(busy)return;busy=true;$('status').textContent=label;document.querySelectorAll('button').forEach(b=>b.disabled=true);try{await fn()}catch(e){$('status').textContent='Error: '+e.message}finally{busy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false)}}
-async function refresh(){const data=await api('/api/sources');const wrap=$('sources');wrap.replaceChildren();$('status').textContent=`${data.sources.length} saved sources · ${data.installed.length}/${data.limit} app slots used`;
-for(const source of data.sources){const sec=node('section');const head=node('div',undefined,'heading');const title=node('strong',source.name);const del=node('button','Remove','remove');del.addEventListener('click',()=>work('Removing source…',async()=>{await api('/api/sources/remove',{id:source.id});await refresh()}));head.append(title,del);sec.append(head,node('small',source.url));if(source.error){sec.append(node('p',source.error));wrap.append(sec);continue}if(!source.apps.length)sec.append(node('p','No compatible IPA entries found'));
-for(const a of source.apps){const row=node('div',undefined,'app');const info=node('div');info.append(node('strong',a.name),node('small',[a.version,a.bundleIdentifier].filter(Boolean).join(' · ')));const installed=data.installed.includes(a.bundleIdentifier);const btn=node('button',installed?'Update':'Install');btn.disabled=!installed&&data.installed.length>=data.limit;btn.addEventListener('click',()=>work(`Downloading ${a.name} from source…`,async()=>{const result=await api('/api/sources/install',{source:source.id,bundleIdentifier:a.bundleIdentifier,install_now:true});await refresh();if(result.refresh?.job){sessionStorage.setItem('sideloaderPendingJob',result.refresh.job);location.href='/#apps';return;}$('status').textContent=typeof result.refresh==='string'&&result.refresh.startsWith('not started:')?`${a.name} imported; installation not started: ${result.refresh.slice(13)}`:`${a.name} imported. Open Apps to select your iPhone and install.`;}));row.append(info,btn);sec.append(row)}wrap.append(sec)} }
+async function refresh(){
+  const data=await api('/api/sources');
+  const wrap=$('sources');
+  wrap.replaceChildren();
+  $('status').textContent=`${data.sources.length} saved sources`;
+  for(const source of data.sources){
+    const sec=node('section');
+    const head=node('div',undefined,'heading');
+    const title=node('strong',source.name);
+    const del=node('button','Remove','remove');
+    del.addEventListener('click',()=>work('Removing source…',async()=>{
+      await api('/api/sources/remove',{id:source.id});await refresh();
+    }));
+    head.append(title,del);
+    sec.append(head,node('small',source.url));
+    if(source.error)sec.append(node('p','Source unavailable: '+source.error));
+    else sec.append(node('small',source.apps.length+' apps available in Apps tab'));
+    wrap.append(sec);
+  }
+}
 async function githubStatus(){
   const s=await api('/api/sources/github/status');
   $('github-credential-status').textContent=s.has_token?'Private repository access configured on this server.':'Public repositories only; no GitHub token saved.';
