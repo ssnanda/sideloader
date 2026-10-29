@@ -98,6 +98,13 @@ python3 -m sideloop.retry_guard failed "$out" "$rc" || true
 n=$(( $(read_fails) + 1 )); echo "$n" > "$FAILS"''',
     "persist stop on failure")
 index = pkg / "index.html"
+# Older persistent checkouts already contain the warning banner, so the
+# usual one-time insertion anchor is gone. Migrate its condition in place.
+old_warning = 'return `${S.signing_guard?.blocked ? `<div class="sect"'
+new_warning = 'return `${S.signing_guard?.blocked && (S.signing_guard.code !== "attempt_in_progress" || !S.job?.running) ? `<div class="sect"'
+source = index.read_text()
+if old_warning in source:
+    index.write_text(source.replace(old_warning, new_warning, 1))
 replace(index,
     'return `${settingsView()}${autoCard}${issues.map(',
     '''return `${S.signing_guard?.blocked && (S.signing_guard.code !== "attempt_in_progress" || !S.job?.running) ? `<div class="sect" style="border:1px solid #c93434;padding:14px;border-radius:12px">
