@@ -24,6 +24,13 @@ def change(source, old, new, label):
         sys.exit(f'2FA safety patch {label}: expected 1 anchor, found {matches}')
     return source.replace(old, new, 1)
 
+# Do not mistake Apple's notification that it already sent a code for
+# AltServer actually waiting for terminal input.
+jobs = change(jobs,
+    'PROMPT = re.compile(r"two.?factor code|verification code|enter (the )?(2fa |verification )?code", re.I)',
+    'PROMPT = re.compile(r"(?:enter|type|provide)\\s+(?:(?:the|your)\\s+)?(?:(?:two[ -]?factor|2fa|verification|security)\\s+)?code\\b|^\\s*(?:two[ -]?factor|2fa|verification)\\s+code\\s*[:>]\\s*$", re.I)',
+    'only prompt when verification input is requested')
+
 jobs = change(jobs,
     'MASK = "••••••••"',
     'MASK = "••••••••"\n# A six-digit code may be echoed by the interactive terminal, even when the\n# app deliberately masks the input itself. Never expose one in job state.\nOTP_ECHO = re.compile(r"(?<![0-9])\\d{6}(?![0-9])")',
@@ -80,6 +87,11 @@ page = change(page,
   if (button) button.disabled = true; // one submission, not repeat taps
   act(() => api("/api/job/input", {json:{text:v}}));''',
     'validate and clear 2FA browser prompt')
+
+page = change(page,
+    '<h2>Verification Code</h2><p>Enter the code sent to your Apple devices.</p>',
+    '<h2>Apple Verification Code</h2><p>Apple sends the six-digit code to your trusted devices when this sign-in reaches verification. Enter it here to continue this same installation attempt.</p>',
+    'explain code delivery at active 2FA prompt')
 
 # No partial application on unknown layouts.
 job_file.write_text(jobs)
