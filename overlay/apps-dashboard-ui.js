@@ -82,11 +82,19 @@ function deviceAppsManager() {
   const scanned = deviceAppScannedFor === udid;
   const known = new Map((S.apps || []).map(app => [app.bundle_id, app]));
   const result = new Map();
-  if (scanned) for (const row of deviceAppRows) result.set(row.bundle_id, {...row, managed:known.get(row.bundle_id)});
+  if (scanned) for (const row of deviceAppRows) {
+    const managed = known.get(row.bundle_id);
+    const target = managed?.targets?.find(t => t.udid === udid);
+    // A user-app inventory entry alone does not establish that a SideLoader
+    // signing/install completed. The device/profile check must agree too.
+    const confirmed = Boolean(managed && target?.installation?.state === "installed");
+    result.set(row.bundle_id, {...row, managed, installed: managed ? confirmed : Boolean(row.installed),
+      scanReported: Boolean(row.installed), confirmed});
+  }
   for (const app of S.apps || []) {
     if (result.has(app.bundle_id)) continue;
     result.set(app.bundle_id, {bundle_id:app.bundle_id, name:app.name, version:app.version,
-      origin:"IPA saved in SideLoader", installed:false, managed:app});
+      origin:"IPA saved in SideLoader", installed:false, scanReported:false, confirmed:false, managed:app});
   }
   const allRows = [...result.values()].sort((a,b)=>a.name.localeCompare(b.name));
   const rows = deviceAppSideloadedOnly ? allRows.filter(deviceAppIsSideloaded) : allRows;
@@ -134,9 +142,9 @@ function deviceAppsManager() {
       `<div class="sl-app-count">Scan iPhone to compare installed apps and stored IPAs.</div>`}
     <div class="list sl-app-list">${rows.map(row=>{
       const selected = scanned ? deviceAppSelected.has(row.bundle_id) : false;
-      const button = row.managed ? (row.installed?"Re-sign":"Install") : "Remove";
+      const button = row.managed ? (row.confirmed?"Re-sign":"Install") : "Remove";
       const disabled = busy || (!row.managed && !scanned);
-      const subtitle = `${row.installed?"Installed on iPhone":"IPA saved · not detected on iPhone"} · ${row.managed?"SideLoader IPA available":row.origin}`;
+      const subtitle = row.managed ? `${row.confirmed?"Installed and verified on iPhone":row.scanReported?"Reported in phone scan · installation NOT verified":"IPA saved · not installed/verified on phone"} · SideLoader IPA available` : `Reported in phone scan · ${row.origin}`;
       return `<div class="sl-app-entry" data-bundle="${esc(row.bundle_id)}">
         <label class="sl-app-select"><input type="checkbox" data-device-app-pick="${esc(row.bundle_id)}" ${selected?"checked":""} ${!scanned?"disabled":""} aria-label="Keep ${esc(row.name)} installed" /></label>
         <span class="sl-app-detail"><b>${esc(row.name)}</b><small>${esc(row.bundle_id)}${row.version?" · "+esc(row.version):""}</small><small>${esc(subtitle)}</small></span>
