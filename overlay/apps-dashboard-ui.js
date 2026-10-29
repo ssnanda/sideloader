@@ -70,7 +70,7 @@ function deviceAppsManager() {
     <div class="list sl-app-list">${rows.map(row=>{
       const selected = scanned ? deviceAppSelected.has(row.bundle_id) : false;
       const button = row.managed ? (row.installed?"Re-sign":"Install") : "Remove";
-      const disabled = busy || (Boolean(row.managed) && blocked) || (!row.managed && !scanned);
+      const disabled = busy || (!row.managed && !scanned);
       const subtitle = `${row.installed?"Installed on iPhone":"IPA saved · not detected on iPhone"} · ${row.managed?"SideLoader IPA available":row.origin}`;
       return `<div class="sl-app-entry" data-bundle="${esc(row.bundle_id)}">
         <label class="sl-app-select"><input type="checkbox" data-device-app-pick="${esc(row.bundle_id)}" ${selected?"checked":""} ${!scanned?"disabled":""} aria-label="Keep ${esc(row.name)} installed" /></label>
@@ -113,7 +113,7 @@ async function uninstallDeviceApps(udid, bundles) {
 }
 
 function singleAppSigning(app, udid, installed) {
-  if (S.signing_guard?.blocked) return toast("Signing paused. Review the earlier failure before allowing a new attempt.");
+  if (S.signing_guard?.blocked) return window.alert("Installation is paused. " + (S.signing_guard.message || "The previous signing attempt failed.") + "\n\nReview the issue before selecting \"Issue resolved — allow one new attempt\". No new Apple sign-in was started.");
   if (S.job?.running || S.watcher?.running) return toast("Another job is running.");
   if (!window.confirm(`${installed?"Re-sign":"Install"} ${app.name} on iPhone?\n\nThis permits ONE AltServer Apple signing invocation. No automatic retries. Proceed?`)) return;
   startJob("/api/refresh", {force:true, app:app.id, device:udid});
