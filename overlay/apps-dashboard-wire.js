@@ -20,6 +20,11 @@
     deviceAppSideloadedOnly = e.target.checked;
     render();
   });
+  on("sideloader-catalog-refresh", "onclick", loadSourceCatalog);
+  root.querySelectorAll("[data-source-app]").forEach(button => button.onclick = () => {
+    const selected = sourceCatalog.find(app => app.bundleIdentifier === button.dataset.sourceApp);
+    if (selected) importSourceApp(selected);
+  });
   on("sideloader-device-app-scan", "onclick", () => {
     const d = root.querySelector("#sideloader-app-device");
     if (d) scanDeviceApps(d.value);
