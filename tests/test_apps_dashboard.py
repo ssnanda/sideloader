@@ -111,6 +111,15 @@ class DashboardPatchTests(unittest.TestCase):
             self.assertEqual(server,(p/'server.py').read_text())
             self.assertEqual(ui,(p/'index.html').read_text())
 
+    def test_wizard_closing_with_extra_whitespace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self.setup(tmp)
+            altered = PAGE.replace(', expanded)}', ',  expanded  ) }')
+            (p/'index.html').write_text(altered)
+            out = self.run_patch(tmp)
+            self.assertEqual(out.returncode, 0, out.stderr + out.stdout)
+            self.assertIn('renderSetupStep(3, "Apps"', (p/'index.html').read_text())
+
     def test_multiple_post_route_tables_are_patched_once_each(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = self.setup(tmp)
