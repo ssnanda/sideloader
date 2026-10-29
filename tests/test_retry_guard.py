@@ -30,6 +30,12 @@ class RetryGuardTests(unittest.TestCase):
         guard.FILE = cfg.STATE / "sideloader-signing-block.json"
         guard.LOCK = cfg.STATE / ".sideloader-signing-block.lock"
 
+    def test_repeat_build_recognizes_existing_signing_banner(self):
+        patcher = (Path(__file__).resolve().parents[1] / "overlay" / "patch-retry-guard.py").read_text()
+        self.assertIn("if not already_has_banner:", patcher)
+        self.assertIn("'sideloader-resume' in page", patcher)
+        self.assertIn("'S.signing_guard.message' in page", patcher)
+
     def test_locked_account_blocks_new_invocation(self):
         token = guard.begin()
         outcome = guard.failed("This Apple Account has been locked for security reasons. (-20209)", 1, token)
