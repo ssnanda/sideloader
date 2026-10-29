@@ -126,4 +126,13 @@ replace(index,
   });
   on("sideloader-remove-account", "onclick",''',
     "manual resume UI")
+# A code-entry timeout is an explicit local cancellation, not an Apple
+# authentication failure. Keep the lock against automatic retries.
+page = index.read_text()
+page = page.replace('>Signing paused — no automatic retries</div>',
+                    '>${S.signing_guard?.code === "2fa_timeout" ? "Verification cancelled — no automatic retry" : "Signing paused — no automatic retries"}</div>')
+page = page.replace(' · Last failure ${new Date((S.signing_guard.since || 0)*1000).toLocaleString()}',
+                    ' · Since ${new Date((S.signing_guard.since || 0)*1000).toLocaleString()}')
+index.write_text(page)
+
 print("Signing safety overlay applied, including persisted failure lock and progress messages.")
