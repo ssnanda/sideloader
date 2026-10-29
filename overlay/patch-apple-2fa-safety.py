@@ -115,6 +115,75 @@ if 'def run_pty(job, argv):' in jobs and 'job.add(data.decode("utf-8", "replace"
                     job.say("AltServer reported an installation error; closing its error dialog.")''',
         'dismiss AltServer fatal terminal dialog')
 
+# A 60-second deadline begins only when the PTY actually requests a code.
+# The deadline is enforced server-side, even when the browser is closed.
+jobs = change(jobs,
+    '        self.lines, self.partial, self.needs_input = [], "", False',
+    '        self.lines, self.partial, self.needs_input = [], "", False\n'
+    '        self.verification_deadline = None\n'
+    '        self.timed_out_2fa = False',
+    'verification timeout fields')
+jobs = change(jobs,
+    '            self.lines = self.lines[-1500:]',
+    '            if self.needs_input and self.verification_deadline is None:\n'
+    '                self.verification_deadline = time.monotonic() + 60\n'
+    '            self.lines = self.lines[-1500:]',
+    'start verification deadline')
+jobs = change(jobs,
+    '            self.needs_input = False\n            self.lines.append("Apple verification code submitted [redacted]")',
+    '            self.needs_input = False\n            self.verification_deadline = None\n'
+    '            self.lines.append("Apple verification code submitted [redacted]")',
+    'clear verification deadline on submission')
+
+if 'def run_pty(job, argv):' in jobs:
+    jobs = change(jobs,
+        '        while True:\n            if select.select([fd], [], [], 0.5)[0]:',
+        '''        while True:
+            with job.lock:
+                timed_out = (job.kind == "refresh" and job.needs_input
+                             and job.verification_deadline is not None
+                             and time.monotonic() >= job.verification_deadline)
+                if timed_out:
+                    job.timed_out_2fa = True
+                    job.needs_input = False
+                    job.verification_deadline = None
+            if timed_out:
+                from . import retry_guard
+                retry_guard.cancelled_2fa_timeout()
+                job.say("Verification code not entered within 60 seconds. Signing cancelled locally.")
+                try:
+                    os.killpg(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                break
+            if select.select([fd], [], [], 0.5)[0]:''',
+        'stop PTY on expired verification deadline')
+    # Do not relabel a deliberate timeout as an AltServer failure.
+    jobs = change(jobs,
+        '    if job.rc and argv and argv[0] == "refresh.sh" and "--recheck" not in argv:',
+        '    if job.rc and not job.timed_out_2fa and argv and argv[0] == "refresh.sh" and "--recheck" not in argv:',
+        'keep cancellation separate from signing errors')
+    jobs = change(jobs,
+        '                "needs_input": self.needs_input, "accepts_input": self.fd is not None,',
+        '                "needs_input": self.needs_input, "accepts_input": self.fd is not None,\n'
+        '                "verification_seconds_remaining": max(0, int(self.verification_deadline - time.monotonic() + 0.999)) if self.verification_deadline is not None else None,',
+        'show remaining verification time')
+
+if '<form class="otp" id="askf">' in page:
+    page = change(page,
+        '<h2>Apple Verification Code</h2><p>Apple sends the six-digit code to your trusted devices when this sign-in reaches verification. Enter it here to continue this same installation attempt.</p>',
+        '<h2>Apple Verification Code</h2><p>Enter the six-digit code sent to your trusted Apple device.</p><p id="sideloader-code-countdown">60 seconds remaining</p>',
+        'show verification deadline')
+    page = change(page,
+        '  box._mode = mode; box._stage = j.stage;',
+        '''  if (mode === "ask") {
+    const countdown = sheetHost.querySelector("#sideloader-code-countdown");
+    if (countdown && j.verification_seconds_remaining !== undefined && j.verification_seconds_remaining !== null)
+      countdown.textContent = j.verification_seconds_remaining + " seconds remaining before cancellation";
+  }
+  box._mode = mode; box._stage = j.stage;''',
+        'update 2FA countdown without resetting input')
+
 # The unit-test fixture has only the input element, while the complete
 # upstream dashboard includes the surrounding challenge explanation.
 if '<h2>Verification Code</h2><p>Enter the code sent to your Apple devices.</p>' in page:
