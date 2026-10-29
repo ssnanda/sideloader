@@ -88,6 +88,33 @@ page = change(page,
   act(() => api("/api/job/input", {json:{text:v}}));''',
     'validate and clear 2FA browser prompt')
 
+
+# AltServer's fatal error dialog waits for "Press any key to continue".
+# Its CLI is running under a PTY, so without acknowledging that dialog the
+# browser shows "Signing in to Apple" indefinitely after Apple has rejected
+# authentication. Send one newline ONLY after an explicit fatal alert and
+# the terminal's closing prompt; this is not another Apple login or 2FA entry.
+if 'def run_pty(job, argv):' in jobs and 'job.add(data.decode("utf-8", "replace"))' in jobs:
+    jobs = change(jobs,
+        '    status = None\n    try:\n        while True:',
+        '    status = None\n    fatal_dialog_buffer = ""\n    fatal_dialog_dismissed = False\n    try:\n        while True:',
+        'track AltServer terminal failure')
+    jobs = change(jobs,
+        '                job.add(data.decode("utf-8", "replace"))',
+        '''                decoded = data.decode("utf-8", "replace")
+                job.add(decoded)
+                # Include split PTY chunks, but retain only recent output.
+                fatal_dialog_buffer = (fatal_dialog_buffer + decoded)[-8192:]
+                if (not fatal_dialog_dismissed
+                        and "Alert: Could not install" in fatal_dialog_buffer
+                        and "Press any key to continue" in fatal_dialog_buffer):
+                    fatal_dialog_dismissed = True
+                    # Dismiss only AltServer's already-failed terminal dialog.
+                    # This does not submit a code or start another attempt.
+                    os.write(fd, b"\\n")
+                    job.say("AltServer reported an installation error; closing its error dialog.")''',
+        'dismiss AltServer fatal terminal dialog')
+
 # The unit-test fixture has only the input element, while the complete
 # upstream dashboard includes the surrounding challenge explanation.
 if '<h2>Verification Code</h2><p>Enter the code sent to your Apple devices.</p>' in page:
