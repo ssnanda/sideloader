@@ -104,6 +104,21 @@ class RetryGuardTests(unittest.TestCase):
         self.assertIn("anisette", state["message"])
         self.assertNotIn("locked", state["message"])
 
+    def test_unanswered_verification_is_cancelled_not_failed(self):
+        token = guard.begin()
+        state = guard.cancelled_2fa_timeout()
+        self.assertEqual(state["code"], "2fa_timeout")
+        self.assertEqual(state["reason"], "user_cancelled")
+        self.assertTrue(state["blocked"])
+        self.assertIn("60 seconds", state["message"])
+        # Late shell errors must not replace a deliberate cancellation.
+        guard.failed("AltServer terminated", 143, token)
+        self.assertEqual(guard.status()["code"], "2fa_timeout")
+        with self.assertRaises(RuntimeError):
+            guard.begin()
+        guard.resume()
+        self.assertFalse(guard.status()["blocked"])
+
     def test_interrupt_requires_manual_resume(self):
         token = guard.begin()
         state = guard.failed("Terminated", 143, token)
