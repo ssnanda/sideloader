@@ -55,7 +55,13 @@ replace(index,
   const checkedTime = checkedAt ? new Date(checkedAt * 1000).toLocaleTimeString([], {hour:"numeric", minute:"2-digit", second:"2-digit"}) : "never";
   const connectionLabel = !recentCheck ? "Status unverified" : onlineDevice ? "Connected" : "Offline — reconnect to continue";""",
         "fresh connection state")
-replace(index,
+# The newer unified Apps dashboard intentionally shortens the Step 1 subtitle.
+# Preserve that fully migrated layout on repeated Docker builds.
+page = index.read_text()
+if not ('/* SideLoader unified iPhone Apps step v1 */' in page and
+        'const connectionLabel =' in page and
+        'devs.length ? `${esc(devs[0].name)} · ${connectionLabel}` : "Not connected"' in page):
+    replace(index,
         'devs.length ? `${esc(devs[0].name)} · ${onlineDevice ? "Connected" : "Saved · Offline — reconnect to continue"}` : "Connect or scan for a device"',
         'devs.length ? `${esc(devs[0].name)} · ${connectionLabel} · Last checked ${checkedTime}` : `Connect or scan for a device · Last checked ${checkedTime}`',
         "wizard last checked label")
