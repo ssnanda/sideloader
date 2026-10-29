@@ -100,7 +100,7 @@ n=$(( $(read_fails) + 1 )); echo "$n" > "$FAILS"''',
 index = pkg / "index.html"
 replace(index,
     'return `${settingsView()}${autoCard}${issues.map(',
-    '''return `${S.signing_guard?.blocked ? `<div class="sect" style="border:1px solid #c93434;padding:14px;border-radius:12px">
+    '''return `${S.signing_guard?.blocked && (S.signing_guard.code !== "attempt_in_progress" || !S.job?.running) ? `<div class="sect" style="border:1px solid #c93434;padding:14px;border-radius:12px">
   <div style="font-weight:700;color:#c93434">Signing paused — no automatic retries</div>
   <p style="margin:8px 0">${esc(S.signing_guard.message || "The previous signing/install attempt failed.")}</p>
   <p style="margin:8px 0">${esc(S.signing_guard.action || "Review Activity and Copy Diagnostics.")}</p>
