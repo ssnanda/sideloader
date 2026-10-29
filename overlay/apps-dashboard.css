@@ -48,3 +48,5 @@
   .setup-step[data-step="1"]:not([open]) .step-caption small,
   .setup-step[data-step="2"]:not([open]) .step-caption small {max-width:52%;}
 }
+.sl-app-filter{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;padding:8px 2px;cursor:pointer;}
+.sl-app-filter input{width:18px;height:18px;accent-color:var(--blue);}
