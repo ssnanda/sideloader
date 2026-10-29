@@ -41,7 +41,7 @@
     if (!d) return;
     const app = (S.apps || []).find(x=>x.bundle_id === bundle);
     if (app) {
-      singleAppSigning(app, d.value, Boolean(deviceAppRows.find(x=>x.bundle_id===bundle)));
+      singleAppSigning(app, d.value, Boolean(app.targets?.some(t=>t.udid===d.value && t.installation?.state==="installed") && deviceAppScannedFor===d.value && deviceAppRows.some(x=>x.bundle_id===bundle)));
     } else if (deviceAppScannedFor === d.value && deviceAppRows.some(x=>x.bundle_id===bundle)) {
       try { await uninstallDeviceApps(d.value,[bundle]); } catch(e) { toast(e.message); }
     }
