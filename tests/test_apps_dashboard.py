@@ -210,6 +210,23 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertIn('No new Apple sign-in was started.', ui)
         self.assertNotIn('Boolean(row.managed) && blocked', ui)
 
+    def test_step3_source_catalog_and_device_verification(self):
+        ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
+        wire=(ROOT/'overlay'/'apps-dashboard-wire.js').read_text()
+        patch=(ROOT/'overlay'/'patch-apps-dashboard.py').read_text()
+        sources=(ROOT/'overlay'/'sources.html').read_text()
+        self.assertIn('async function loadSourceCatalog()',ui)
+        self.assertIn('install_now:false',ui)
+        self.assertIn('${catalogMarkup}',ui)
+        self.assertIn('target?.installation?.state === "installed"',ui)
+        self.assertIn('installation NOT verified',ui)
+        self.assertIn('row.confirmed?"Re-sign":"Install"',ui)
+        self.assertIn('on("sideloader-catalog-refresh", "onclick", loadSourceCatalog)',wire)
+        self.assertIn('data-source-app',wire)
+        self.assertIn('loadSourceCatalog();',patch)
+        self.assertNotIn("installed?'Update':'Install'",sources)
+        self.assertNotIn("install_now:true",sources)
+
     def test_install_job_dialog_and_sources_handoff(self):
         patcher=(ROOT/'overlay'/'patch-apps-dashboard.py').read_text()
         sources=(ROOT/'overlay'/'sources.html').read_text()
