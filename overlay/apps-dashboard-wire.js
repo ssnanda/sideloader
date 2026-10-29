@@ -16,6 +16,10 @@
     deviceAppError = "";
     render();
   });
+  on("sideloader-sideloaded-only", "onchange", e => {
+    deviceAppSideloadedOnly = e.target.checked;
+    render();
+  });
   on("sideloader-device-app-scan", "onclick", () => {
     const d = root.querySelector("#sideloader-app-device");
     if (d) scanDeviceApps(d.value);
