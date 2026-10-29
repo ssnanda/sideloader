@@ -3,6 +3,45 @@ let deviceAppTarget = null;
 let deviceAppRows = [], deviceAppSelected = new Set(), deviceAppScannedFor = null;
 let deviceAppBusy = false, deviceAppError = "";
 let deviceAppSideloadedOnly = true;
+let sourceCatalog = [], sourceCatalogError = "", sourceCatalogBusy = false;
+let sourceCatalogLoaded = false;
+
+async function loadSourceCatalog() {
+  if (sourceCatalogBusy) return;
+  sourceCatalogBusy = true;
+  try {
+    const data = await api("/api/sources");
+    sourceCatalog = (data.sources || []).flatMap(source =>
+      (source.apps || []).map(app => ({...app, source_id:source.id, source_name:source.name})));
+    sourceCatalogError = "";
+    sourceCatalogLoaded = true;
+  } catch (e) {
+    sourceCatalogError = e.message || "Cannot load sources";
+  } finally {
+    sourceCatalogBusy = false;
+    render();
+  }
+}
+
+async function importSourceApp(item) {
+  if (sourceCatalogBusy) return;
+  sourceCatalogBusy = true;
+  render();
+  try {
+    const r = await api("/api/sources/install", {json:{
+      source:item.source_id, bundleIdentifier:item.bundleIdentifier, install_now:false
+    }});
+    if (!r.app_id) throw new Error("No IPA was imported");
+    await refresh();
+    window.alert(item.name + " imported to SideLoader. Choose Install in Apps to put it on your iPhone.");
+  } catch (e) {
+    window.alert("IPA import failed: " + e.message);
+  } finally {
+    sourceCatalogBusy = false;
+    render();
+  }
+}
+
 
 // Not every sideloaded app carries a readable signer identity in iOS inventory.
 // Show confirmed developer-signed apps plus IPAs known to SideLoader by default.
@@ -55,6 +94,32 @@ function deviceAppsManager() {
   const addable = scanned ? rows.filter(a => !a.installed && a.managed && deviceAppSelected.has(a.bundle_id)).length : 0;
   const busy = deviceAppBusy || Boolean(S.job?.running || S.watcher?.running);
   const blocked = Boolean(S.signing_guard?.blocked);
+  const savedBundles = new Map((S.apps || []).map(app => [app.bundle_id, app]));
+  const catalogRows = [...new Map(sourceCatalog.map(app => [app.bundleIdentifier, app])).values()]
+    .sort((a,b) => a.name.localeCompare(b.name));
+  const catalogMarkup = `<div class="sl-source-catalog">
+    <div class="sl-app-toolbar"><b>Apps from Sources</b>
+      <button type="button" class="cap" id="sideloader-catalog-refresh" ${sourceCatalogBusy?"disabled":""}>${sourceCatalogBusy?"Loading…":"Refresh sources"}</button>
+    </div>
+    ${sourceCatalogError?`<div class="foot">${esc(sourceCatalogError)}</div>`:""}
+    ${!sourceCatalogLoaded?`<div class="foot">Select Refresh sources to browse apps from saved sources.</div>`:
+      catalogRows.map(app => {
+        const saved = savedBundles.get(app.bundleIdentifier);
+        const currentVersion = saved?.version || "";
+        const identical = saved && currentVersion === app.version;
+        // Source version is catalog information only; do not claim an update
+        // without comparing the saved IPA's version, and never infer a phone install.
+        const label = identical ? "Imported" : saved ? "Import source version" : "Import IPA";
+        return `<div class="sl-app-entry">
+          <span class="sl-app-detail"><b>${esc(app.name)}</b>
+            <small>${esc(app.version)} · ${esc(app.source_name)}</small>
+            <small>${saved?"Saved IPA: "+esc(currentVersion)+" · phone installation checked separately":"Not imported"}</small>
+          </span>
+          <button type="button" class="cap" data-source-app="${esc(app.bundleIdentifier)}"
+            ${identical||sourceCatalogBusy?"disabled":""}>${label}</button>
+        </div>`;
+      }).join("") || '<div class="foot">No apps in saved sources. Add a source in Sources.</div>'}
+  </div>`;
   return `<div class="sl-app-manager">
     <div class="sl-app-toolbar">
       <label for="sideloader-app-device">iPhone</label>
@@ -78,7 +143,8 @@ function deviceAppsManager() {
         <button type="button" class="cap ${row.installed?"":"solid"}" data-device-app-action="${esc(row.bundle_id)}" ${disabled?"disabled":""}>${button}</button>
       </div>`;
     }).join("") || `<div class="cell">${deviceAppSideloadedOnly?"No identified sideloaded apps. Uncheck Sideloaded only to show all.":"No saved IPAs or scanned apps to display."}</div>`}</div>
-    ${blocked?`<div class="foot" style="color:var(--red)">Apple signing is paused. Scanning and removal still work; Install and Re-sign stay blocked.</div>`:""}
+    ${blocked?`<div class="foot" style="color:var(--red)">Apple signing is paused. Scanning and removal still work; use Install to see why signing is blocked.</div>`:""}
+    ${catalogMarkup}
   </div>`;
 }
 
