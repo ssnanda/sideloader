@@ -158,6 +158,19 @@ if 'def run_pty(job, argv):' in jobs:
                 break
             if select.select([fd], [], [], 0.5)[0]:''',
         'stop PTY on expired verification deadline')
+    # The shell's PTY path does not write AltServer's interactive errors into
+    # its temporary output file. Preserve explicit Apple errors captured by
+    # Job.lines instead of leaving the generic "install_failed" classification.
+    # This only refines an existing failed reservation; it never retries login.
+    jobs = change(jobs,
+        '    if job.rc and not job.timed_out_2fa and argv and argv[0] == "refresh.sh" and "--recheck" not in argv:\n        from . import retry_guard\n        retry_guard.failed("\\n".join(job.lines[-100:]), job.rc)',
+        '''    if not job.timed_out_2fa and argv and argv[0] == "refresh.sh" and "--recheck" not in argv:
+        from . import retry_guard
+        terminal = "\\n".join(job.lines[-150:])
+        if job.rc or any(marker in terminal for marker in ("-36607", "-20209", "-80046", "-80045", "-22406")):
+            retry_guard.failed(terminal, job.rc or 1)''',
+        'preserve explicit Apple sign-in errors from PTY')
+
     # Do not relabel a deliberate timeout as an AltServer failure.
     jobs = change(jobs,
         '    if job.rc and argv and argv[0] == "refresh.sh" and "--recheck" not in argv:',
