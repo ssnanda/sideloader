@@ -111,6 +111,21 @@ class DashboardPatchTests(unittest.TestCase):
             self.assertEqual(server,(p/'server.py').read_text())
             self.assertEqual(ui,(p/'index.html').read_text())
 
+    def test_multiple_post_route_tables_are_patched_once_each(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self.setup(tmp)
+            extra = '            "/api/logs/clear": self.clear_activity_logs,'
+            src = SERVER.replace(extra, '\n'.join([extra] * 5))
+            (p/'server.py').write_text(src)
+            first = self.run_patch(tmp)
+            self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+            after = (p/'server.py').read_text()
+            route = '            "/api/device/apps/remove": self.remove_phone_apps,'
+            self.assertEqual(after.count(route), 5)
+            second = self.run_patch(tmp)
+            self.assertEqual(second.returncode, 0, second.stderr + second.stdout)
+            self.assertEqual((p/'server.py').read_text(), after)
+
     def test_existing_inventory_import_in_other_position_is_not_duplicated(self):
         with tempfile.TemporaryDirectory() as tmp:
             p=self.setup(tmp)
