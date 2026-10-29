@@ -204,6 +204,16 @@ class DashboardPatchTests(unittest.TestCase):
             self.assertNotEqual(a.returncode,0)
             self.assertEqual((p/'server.py').read_text(),SERVER)
 
+    def test_sideloaded_filter_defaults_on_and_preserves_selection(self):
+        ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
+        wire=(ROOT/'overlay'/'apps-dashboard-wire.js').read_text()
+        self.assertIn('let deviceAppSideloadedOnly = true;', ui)
+        self.assertIn('deviceAppSideloadedOnly ? allRows.filter(deviceAppIsSideloaded)', ui)
+        self.assertIn('row.managed || row.origin === "Developer signed (reported)"', ui)
+        self.assertIn('id="sideloader-sideloaded-only"', ui)
+        self.assertIn('deviceAppSideloadedOnly = e.target.checked', wire)
+        self.assertIn('const removed = deviceAppRows.filter', wire)
+
     def test_frontend_helper_javascript_syntax(self):
         if subprocess.run(['which','node'],capture_output=True).returncode: self.skipTest('node missing')
         src=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
