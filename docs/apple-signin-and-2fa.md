@@ -14,6 +14,25 @@ A signed-in/trusted session can proceed without another verification code. An au
 4. **Identity compatibility:** SideLoader uses AltServer-Linux NG's Mac anisette configuration. The newer AltStore authentication PRs confirm that GrandSlam headers, provider identity and client User-Agent need to match. `deploy/mac-host.yml` and `deploy/ubuntu-host.yml` configure a default Mac-provider-matching `ALTSERVER_GSA_USER_AGENT`. Those values are overridable for other anisette providers.
 5. **Important distinction:** AltStore Classic 2.3.2/AltServer 1.8.3 and AltServer-Linux NG are *not the same binary or anisette provisioning implementation*. Matching their 2FA state transitions does not prove identical Apple acceptance or that a particular account will receive a code.
 
+## Code-delivery indicator (Step 3, SideLoader 0.2.0+44)
+
+The active installation screen displays one of three statuses, updated from
+the current AltServer job (not prior logs):
+
+- **Apple reports verification code sent:** AltSign received the automatic
+  trusted-device challenge (`hsc=409`) and logged that Apple had already
+  initiated a code. This does **not** confirm receipt by this particular iPhone.
+- **Verification code requested · delivery unconfirmed:** The interactive
+  AltServer callback is awaiting six-digit input, without an explicit
+  `hsc=409` sent report. The input field opens automatically.
+- **Verification code not reported sent:** No code-delivery signal has appeared
+  in this signing attempt. This is not proof that Apple did not send one.
+
+The state is job-scoped, preserved for the job result, and read-only. A report of
+a sent code alone does not open an input field, submit a code, or request a
+second one. The actual callback opens the input field and begins the 60-second
+deadline. No Apple notification receipt API is available through this backend.
+
 ## Observable outcomes
 
 | Apple / backend behavior | SideLoader behavior |
