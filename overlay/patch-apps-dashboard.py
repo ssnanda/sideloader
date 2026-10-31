@@ -149,7 +149,8 @@ if marker not in h:
                 '  ${sideloopCoreCard()}\n  ${altserverBackendCard()}',
                 '  ${sideLoaderVersionStrip()}', 'replace full build provenance cards')
     h = replace(h, 'function settingsView() {',
-                (overlays / 'apps-dashboard-ui.js').read_text() +
+                (overlays / 'apps-dashboard-ui.js').read_text() + '\n' +
+                (overlays / 'screen-flow-ui.js').read_text() +
                 '\nfunction settingsView() {', 'apps manager helper')
     h = replace(h,
                 '  on("reload", "onclick", loadLogs);',
@@ -162,7 +163,8 @@ if marker not in h:
 # Refresh Apps manager code inside a persistent, already unified dashboard.
 # Without this migration, the marker above skips the new UI on future builds.
 else:
-    current_ui = (overlays / 'apps-dashboard-ui.js').read_text()
+    current_ui = ((overlays / 'apps-dashboard-ui.js').read_text() + '\n' +
+                  (overlays / 'screen-flow-ui.js').read_text())
     start = h.find(marker)
     end = h.find('\nfunction settingsView() {', start)
     if start < 0 or end < 0 or h.count(marker) != 1:
@@ -216,7 +218,9 @@ new_start = '''async function startJob(path, body={}) {
 if old_start in h:
     h = h.replace(old_start, new_start, 1)
 elif new_start not in h:
-    sys.exit('Apps dashboard patch: unrecognized install job launcher')
+    # Newer builds intentionally route the same job into an in-page screen.
+    if 'function startJob(path, body={}) { return slStartJob(path, body); }' not in h:
+        sys.exit('Apps dashboard patch: unrecognized install job launcher')
 
 # Boot can occur after a Sources installation has already finished, so the
 # completed job must still be watched to show its result.
