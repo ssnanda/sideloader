@@ -52,14 +52,12 @@
     const removed = deviceAppRows.filter(row=>!deviceAppSelected.has(row.bundle_id)).map(row=>row.bundle_id);
     const missing = (S.apps||[]).filter(app=>!deviceAppRows.some(row=>row.bundle_id===app.bundle_id) && deviceAppSelected.has(app.bundle_id));
     if (missing.length>1) return toast("Select only one missing IPA per sync to avoid repeated Apple sign-ins.");
-    if (missing.length && S.signing_guard?.blocked) return toast("Signing paused. Remove the app selection or review Activity first.");
+    if (missing.length && S.signing_guard?.blocked) return slScreen("paused",{appId:missing[0].id,name:missing[0].name,udid:d.value,installed:false});
     if (!removed.length && !missing.length) return toast("The selected apps already match the iPhone.");
     if (removed.length) {
-      try {
-        const ok = await uninstallDeviceApps(d.value, removed);
-        if (!ok) return;
-      } catch(e) { return toast(e.message); }
+      slRemoveApps(d.value, removed, missing.length ? missing[0].id : null);
+      return; // Wait for on-screen confirmation; do not uninstall immediately.
     }
     if (missing.length) singleAppSigning(missing[0], d.value, false);
-    else toast("iPhone app selection synchronized. No Apple sign-in attempted.");
+    else slMessage("Already synchronized", "The selected apps already match the iPhone.");
   });
