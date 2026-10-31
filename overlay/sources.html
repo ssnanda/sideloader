@@ -37,8 +37,18 @@ input{font-size:16px}
   .sources-tabs a{font-size:14px}
 }
 @media(max-width:350px){.app{flex-wrap:wrap}.app button{margin-left:auto}}
+
+/* Full-page source confirmation: no native browser confirm dialogs. */
+main.sl-confirming > :not(header):not(#sources-action){display:none!important}
+#sources-action[hidden]{display:none!important}
+#sources-action{max-width:640px;min-height:280px;padding:30px;border-radius:20px;border:1px solid #8884;background:ButtonFace}
+#sources-action h2{margin:0 0 14px;font-size:26px}
+#sources-action p{color:CanvasText;line-height:1.6}
+#sources-action .source-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}
+#sources-action .source-cancel{background:transparent;color:CanvasText;border:1px solid #8887}
+#sources-action .source-danger{background:#b72c3b}
 </style>
-</head><body><main><header><h1>Sources</h1></header><p>Paste an existing AltStore / SideStore Classic JSON source URL. IPA downloads stay at their existing hosted locations. App selection and installation are handled in the Apps tab.</p>
+</head><body><main><header><h1>Sources</h1></header><section id="sources-action" hidden aria-live="polite"></section><p>Paste an existing AltStore / SideStore Classic JSON source URL. IPA downloads stay at their existing hosted locations. App selection and installation are handled in the Apps tab.</p>
 <form id="add"><input id="url" type="url" placeholder="https://example.com/apps.json" required aria-label="AltStore source URL"><button>Add source</button></form>
 <section id="github-discovery"><div class="heading"><strong>Discover from GitHub</strong></div>
 <p>Paste a GitHub profile. Scan public repositories and accessible private repositories for altstore.json (including nested folders). Existing sources are skipped.</p>
@@ -60,6 +70,25 @@ let busy=false;
 function node(tag,text,css){const x=document.createElement(tag);if(text!==undefined)x.textContent=text;if(css)x.className=css;return x}
 async function api(path,body){const res=await fetch(path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Requested-With':'sideloop'},credentials:'same-origin',body:body?JSON.stringify(body):undefined});const data=await res.json();if(!res.ok)throw Error(data.error||`HTTP ${res.status}`);return data}
 async function work(label,fn){if(busy)return;busy=true;$('status').textContent=label;document.querySelectorAll('button').forEach(b=>b.disabled=true);try{await fn()}catch(e){$('status').textContent='Error: '+e.message}finally{busy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false)}}
+function sourceConfirm(title,detail,label,handler){
+  const main=document.querySelector('main'),panel=$('sources-action');
+  main.classList.add('sl-confirming');
+  panel.hidden=false;
+  panel.replaceChildren();
+  const heading=node('h2',title);
+  const copy=node('p',detail);
+  const actions=node('div',undefined,'source-actions');
+  const cancel=node('button','Back to Sources','source-cancel');
+  const accept=node('button',label,'source-danger');
+  const close=()=>{main.classList.remove('sl-confirming');panel.hidden=true;panel.replaceChildren();};
+  cancel.addEventListener('click',close);
+  accept.addEventListener('click',()=>work(label+'…',async()=>{
+    await handler();close();
+  }));
+  actions.append(cancel,accept);
+  panel.append(heading,copy,actions);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
 async function refresh(){
   const data=await api('/api/sources');
   const wrap=$('sources');
@@ -70,7 +99,7 @@ async function refresh(){
     const head=node('div',undefined,'heading');
     const title=node('strong',source.name);
     const del=node('button','Remove','remove');
-    del.addEventListener('click',()=>work('Removing source…',async()=>{
+    del.addEventListener('click',()=>sourceConfirm('Remove source?',source.name+' will be removed from the saved source list. Imported IPAs remain available.','Remove source',async()=>{
       await api('/api/sources/remove',{id:source.id});await refresh();
     }));
     head.append(title,del);
@@ -106,13 +135,15 @@ $('github-scan').addEventListener('submit',e=>{
     if(result.warnings.length)panel.append(node('p',result.warnings.slice(0,8).join(' | ')));
   });
 });
-$('github-disconnect').addEventListener('click',()=>{
-  if(!confirm('Forget the saved GitHub access token? Private sources may become unavailable until another token is added.'))return;
-  work('Forgetting GitHub token…',async()=>{
+$('github-disconnect').addEventListener('click',()=>sourceConfirm(
+  'Forget saved GitHub token?',
+  'Private sources may become unavailable until another read-only token is added.',
+  'Forget token',
+  async()=>{
     await api('/api/sources/github/disconnect',{});
     await githubStatus();
     await refresh();
-  });
-});
+  }
+));
 $('add').addEventListener('submit',e=>{e.preventDefault();work('Validating JSON source…',async()=>{await api('/api/sources/add',{url:$('url').value.trim()});$('url').value='';await refresh()})});Promise.all([refresh(),githubStatus()]).catch(e=>$('status').textContent='Error: '+e.message);
 </script></body></html>
