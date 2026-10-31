@@ -33,9 +33,9 @@ async function importSourceApp(item) {
     }});
     if (!r.app_id) throw new Error("No IPA was imported");
     await refresh();
-    window.alert(item.name + " imported to SideLoader. Choose Install in Apps to put it on your iPhone.");
+    slMessage("IPA imported", item.name + " is ready in Apps / Step 3. Choose Install to add it to your iPhone.");
   } catch (e) {
-    window.alert("IPA import failed: " + e.message);
+    slMessage("IPA import failed", e.message);
   } finally {
     sourceCatalogBusy = false;
     render();
@@ -178,17 +178,11 @@ async function scanDeviceApps(udid) {
 }
 
 async function uninstallDeviceApps(udid, bundles) {
-  if (!bundles.length) return;
-  const names = bundles.map(bundle=>deviceAppRows.find(a=>a.bundle_id===bundle)?.name || bundle);
-  if (!window.confirm(`UNINSTALL ${bundles.length} app(s) from your iPhone?\n\n${names.join("\n")}\n\nTheir on-device data may be erased. Saved SideLoader IPAs remain. This does NOT sign in to Apple. Proceed?`)) return false;
-  await api("/api/device/apps/remove", {json:{device:udid,bundles,acknowledge:true}});
-  await scanDeviceApps(udid);
-  return true;
+  if (!bundles?.length) return false;
+  slRemoveApps(udid, bundles);
+  return false; // Removal happens only on the separate confirmation screen.
 }
 
 function singleAppSigning(app, udid, installed) {
-  if (S.signing_guard?.blocked) return window.alert("Installation is paused. " + (S.signing_guard.message || "The previous signing attempt failed.") + "\n\nReview the issue before selecting \"Issue resolved — allow one new attempt\". No new Apple sign-in was started.");
-  if (S.job?.running || S.watcher?.running) return toast("Another job is running.");
-  if (!window.confirm(`${installed?"Re-sign":"Install"} ${app.name} on iPhone?\n\nThis permits ONE AltServer Apple signing invocation. No automatic retries. Proceed?`)) return;
-  startJob("/api/refresh", {force:true, app:app.id, device:udid});
+  slInstall(app, udid, installed);
 }
