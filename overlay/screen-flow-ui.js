@@ -60,7 +60,7 @@ function slScreenView(){
       '</div><h2>'+title+'</h2>';
     if(verifying){
       body+='<p>Enter the code Apple sent to your trusted device. You have '+(j.verification_seconds_remaining??60)+' seconds remaining.</p>'+
-        '<form id="sl-screen-otp-form"><label for="sl-screen-otp">Six-digit code</label>'+
+        '<form id="sl-screen-otp-form" novalidate><label for="sl-screen-otp">Six-digit code</label>'+
         '<input id="sl-screen-otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" minlength="6" required placeholder="000000">'+
         '<button type="submit" class="btn" '+(slFlowBusy?"disabled":"")+'>Verify</button></form>';
     }else if(finished){
