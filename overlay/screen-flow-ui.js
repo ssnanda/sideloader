@@ -49,15 +49,17 @@ function slScreenView(){
     body='<div class="sl-screen-emoji">🔐</div><h2>Delete saved credentials?</h2><p>SideLoader removes your saved Apple Account credentials and disables renewal. Saved IPAs and pairing remain.</p>';
     buttons='<button type="button" class="btn sl-screen-danger" id="sl-screen-remove-account">Remove saved account</button>';
   }else if(f.mode==="job"){
-    const verifying=!!(j?.running&&j.needs_input&&j.accepts_input);
+    const verifying=!!(j?.running&&j.needs_input&&j.accepts_input&&j.kind==="refresh");
+    const sent=!!(j?.running&&j.kind==="refresh"&&j.verification_delivery==="reported_sent");
+    const showOtp=verifying||sent;
     const finished=!!(j&&!j.running);
     const failed=finished&&(j.rc!==0||(j.kind==="refresh"&&S.signing_guard?.blocked));
     const good=finished&&!failed;
     const last=(jobLines||[]).filter(t=>/error|failed|unable to|could not|cancel|[-]36607|[-]80046/i.test(t)).slice(-1)[0];
     const explanation=failed?(S.signing_guard?.message||last||"The operation failed."):"Installation finished and verified by the server.";
     const challengeWasSeen=Boolean(j?.verification_challenge_seen);
-    title=verifying?"Apple verification":failed?"Installation failed":good?"Installation complete":esc(j?.title||f.title||"Installing…");
-    body='<div class="sl-screen-emoji">'+(verifying?"🔢":failed?"⚠️":good?"✅":"⚙️")+
+    title=showOtp?"Apple verification":failed?"Installation failed":good?"Installation complete":esc(j?.title||f.title||"Installing…");
+    body='<div class="sl-screen-emoji">'+(showOtp?"🔢":failed?"⚠️":good?"✅":"⚙️")+
       '</div><h2>'+title+'</h2>';
     // Source of truth: an hsc=409 report is evidence Apple initiated a code,
     // NOT proof that it appeared on this particular iPhone. Other prompts
@@ -77,11 +79,13 @@ function slScreenView(){
       body+='<div class="sl-screen-delivery '+(sent?"reported":requested?"requested":"pending")+
         '" role="status" aria-live="polite"><strong>'+label+'</strong><p>'+info+'</p></div>';
     }
-    if(verifying){
-      body+='<p>AltServer has requested the six-digit verification code. Check your trusted Apple device. If no code arrived, do not enter a guessed code; this attempt will cancel in '+(j.verification_seconds_remaining??60)+' seconds.</p>'+
+    if(showOtp){
+      body+='<p>'+(verifying
+        ? 'Enter the six-digit code. '+j.verification_seconds_remaining+' seconds remain to submit it.'
+        : 'Apple reports that a code was sent. Enter it now; Verify becomes available when AltServer requests the code.')+'</p>'+
         '<form id="sl-screen-otp-form" novalidate><label for="sl-screen-otp">Six-digit code</label>'+
         '<input id="sl-screen-otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" minlength="6" required placeholder="000000">'+
-        '<button type="submit" class="btn" '+(slFlowBusy?"disabled":"")+'>Verify</button></form>';
+        '<button type="submit" class="btn" '+(slFlowBusy||!verifying?"disabled":"")+'>'+(verifying?"Verify code":"Preparing verification…")+'</button></form>';
     }else if(finished){
       body+='<p>'+esc(explanation)+'</p>';
       if(failed&&!challengeWasSeen&&j?.kind==='refresh')body+='<p class="sl-screen-note">Apple authentication ended before AltServer requested a verification code. SideLoader cannot force Apple to send one. No code entry is available for this failed attempt.</p>';
@@ -175,7 +179,7 @@ async function slVerifyCode(e){
   const input=document.getElementById("sl-screen-otp");
   const code=input?.value.trim()||"";
   if(!/^[0-9]{6}$/.test(code)){slFlowError="Enter exactly six digits.";render();return;}
-  if(!S.job?.running||!S.job.needs_input){slFlowError="No active verification request.";render();return;}
+  if(!S.job?.running||S.job.kind!=="refresh"||S.job.id!==slFlow?.jobId||!S.job.needs_input||!S.job.accepts_input){slFlowError="AltServer is not ready for a verification code yet.";render();return;}
   if(slFlowBusy)return;
   input.value="";slFlowBusy=true;slFlowError="";render();
   try{await api("/api/job/input",{json:{text:code}});}catch(err){slFlowError=err.message;}
