@@ -28,10 +28,13 @@ the current AltServer job (not prior logs):
 - **Verification code not reported sent:** No code-delivery signal has appeared
   in this signing attempt. This is not proof that Apple did not send one.
 
-The state is job-scoped, preserved for the job result, and read-only. A report of
-a sent code alone does not open an input field, submit a code, or request a
-second one. The actual callback opens the input field and begins the 60-second
-deadline. No Apple notification receipt API is available through this backend.
+The state is job-scoped, preserved for the job result, and read-only. When
+Apple reports a sent code (the `hsc=409` signal), SideLoader immediately shows
+the six-digit entry field in Step 3. The user can type immediately; the **Verify**
+button becomes available when AltServer's interactive callback is ready to read
+the code. The code is never submitted prematurely. The callback still starts
+the 60-second timer. No second code is requested and no Apple notification
+receipt API is available through this backend.
 
 ## Observable outcomes
 
