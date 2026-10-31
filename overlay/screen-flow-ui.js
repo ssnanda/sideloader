@@ -84,6 +84,16 @@ async function slStartJob(path,payload={}){
   slFlowBusy=true;
   slScreen("job",{jobId:null,title:path==="/api/recheck"?"Checking installed apps":path==="/api/pair"?"Connecting iPhone":"Installing app"});
   try{
+    // A newly imported source IPA may not yet be assigned to this iPhone.
+    // Preserve its existing targets; assigning locally does not sign in to Apple.
+    if(path==="/api/refresh"&&payload.app&&payload.device){
+      const app=(S.apps||[]).find(a=>a.id===payload.app);
+      if(app&&!(app.targets||[]).some(t=>t.udid===payload.device)){
+        const devices=[...(app.targets||[]).map(t=>t.udid),payload.device];
+        await api("/api/app/devices",{json:{app:app.id,devices}});
+        await refresh();
+      }
+    }
     const r=await api(path,{json:payload});
     if(!r?.job)throw Error("The server did not create a task.");
     watched.add(r.job);dismissedJob=null;slFlow.jobId=r.job;
