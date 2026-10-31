@@ -33,6 +33,12 @@ def handler(app):
 
 PAGE = '''<html><head><style>body{color:blue}</style></head><body><script>
 const setupChoice = null;
+async function boot() {
+  await refresh();
+  if (!S.configured) view = "apps";
+  render(); poll();
+}
+function renderAuth(first) {}
 function sideloopCoreCard(){return 'core';}
 function altserverBackendCard(){return 'backend';}
 function settingsView() {
