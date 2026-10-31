@@ -181,6 +181,12 @@ else:
     wire_end = '  for (const id of ["auto", "auto2"])'
     ws = h.find(wire_start)
     we = h.find(wire_end, ws)
+    if ws >= 0 and we < 0:
+        # Minimal test fixtures have no auto-renew handlers after this group.
+        # The next unindented brace is the end of wire(), not an event.
+        boundary = h.find('\n}', ws)
+        if boundary >= 0:
+            we = boundary + 1
     if ws < 0 or we < 0 or we <= ws:
         sys.exit('Apps dashboard patch: cannot safely migrate event handlers')
     h = h[:ws] + (overlays / 'apps-dashboard-wire.js').read_text().rstrip('\n') + '\n' + h[we:]
