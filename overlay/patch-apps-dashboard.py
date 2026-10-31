@@ -183,7 +183,7 @@ else:
     we = h.find(wire_end, ws)
     if ws < 0 or we < 0 or we <= ws:
         sys.exit('Apps dashboard patch: cannot safely migrate event handlers')
-    h = h[:ws] + (overlays / 'apps-dashboard-wire.js').read_text().rstrip('\\n') + '\\n' + h[we:]
+    h = h[:ws] + (overlays / 'apps-dashboard-wire.js').read_text().rstrip('\n') + '\n' + h[we:]
     css = (overlays / 'apps-dashboard.css').read_text()
     filter_css = '\n.sl-app-filter{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;padding:8px 2px;cursor:pointer;}\n.sl-app-filter input{width:18px;height:18px;accent-color:var(--blue);}\n'
     if '.sl-app-filter{' not in h:
