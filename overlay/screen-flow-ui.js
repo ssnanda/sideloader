@@ -175,6 +175,16 @@ function slWireScreen(){
   });
   // Override legacy handlers which used window.confirm().
   on("sideloader-resume","onclick",()=>slScreen("resume"));
+  on("useipa","onclick",async()=>{
+    if(!pending?.filename)return slMessage("No IPA selected","Choose an IPA in Step 3 first.");
+    const filename=pending.filename;
+    try{
+      await api("/api/ipa/use",{json:{filename}});
+      pending=null;
+      await refresh();
+      slMessage("IPA imported", filename+" is saved in SideLoader. Select Install in Apps / Step 3 to add it to your iPhone.");
+    }catch(e){slMessage("IPA import failed",e.message);}
+  });
   on("sideloader-remove-account","onclick",()=>slScreen("account"));
   on("sideloader-clear-logs","onclick",()=>slScreen("logs",{screenView:"activity"}));
 }
