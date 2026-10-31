@@ -1,12 +1,12 @@
 /* SideLoader screen workflow v1: actions replace Apps screen, never open a modal. */
-let slFlow=null, slFlowError="", slFlowBusy=false;
+let slFlow=null, slFlowError="", slFlowBusy=false, slOtpWasVisible=false;
 
 function slScreen(mode,data={}) {
-  slFlow={...data,mode}; slFlowError="";
+  slFlow={...data,mode}; slFlowError=""; slOtpWasVisible=false;
   view=data.screenView==="activity"?"activity":"apps"; history.replaceState(null,"","#"+view);
   lastPage=null; render(); window.scrollTo({top:0,behavior:"smooth"});
 }
-function slHome(){slFlow=null;slFlowError="";lastPage=null;render();if(view==="activity")loadLogs();}
+function slHome(){slFlow=null;slFlowError="";slOtpWasVisible=false;lastPage=null;render();if(view==="activity")loadLogs();}
 function slMessage(title,message){slScreen("message",{title,message});}
 function slInstall(app,udid,installed=false){
   if(!app||!udid)return slMessage("Select an iPhone","Choose an iPhone and an app first.");
@@ -55,21 +55,24 @@ function slScreenView(){
     const good=finished&&!failed;
     const last=(jobLines||[]).filter(t=>/error|failed|unable to|could not|cancel|[-]36607|[-]80046/i.test(t)).slice(-1)[0];
     const explanation=failed?(S.signing_guard?.message||last||"The operation failed."):"Installation finished and verified by the server.";
+    const challengeWasSeen=Boolean(j?.verification_challenge_seen);
     title=verifying?"Apple verification":failed?"Installation failed":good?"Installation complete":esc(j?.title||f.title||"Installing…");
     body='<div class="sl-screen-emoji">'+(verifying?"🔢":failed?"⚠️":good?"✅":"⚙️")+
       '</div><h2>'+title+'</h2>';
     if(verifying){
-      body+='<p>Enter the code Apple sent to your trusted device. You have '+(j.verification_seconds_remaining??60)+' seconds remaining.</p>'+
+      body+='<p>AltServer has requested the six-digit verification code. Check your trusted Apple device. If no code arrived, do not enter a guessed code; this attempt will cancel in '+(j.verification_seconds_remaining??60)+' seconds.</p>'+
         '<form id="sl-screen-otp-form" novalidate><label for="sl-screen-otp">Six-digit code</label>'+
         '<input id="sl-screen-otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" minlength="6" required placeholder="000000">'+
         '<button type="submit" class="btn" '+(slFlowBusy?"disabled":"")+'>Verify</button></form>';
     }else if(finished){
       body+='<p>'+esc(explanation)+'</p>';
+      if(failed&&!challengeWasSeen&&j?.kind==='refresh')body+='<p class="sl-screen-note">Apple authentication ended before AltServer requested a verification code. SideLoader cannot force Apple to send one. No code entry is available for this failed attempt.</p>';
+      if(failed&&challengeWasSeen)body+='<p class="sl-screen-note">A verification step was requested during this attempt. Review the error above before explicitly starting a new attempt.</p>';
     }else{
       const stages=["Apple sign-in","Signing IPA","Sending to device","Verifying installation"];
       const idx=Math.max(0,["signin","sign","send","install"].indexOf(j?.stage||""));
       const percent=Math.min(98,Math.round((idx*23)+8+10*(j?.fraction||0)));
-      body+='<p>Keep your iPhone unlocked and connected.</p><div class="sl-screen-meter"><span style="width:'+percent+'%"></span></div>'+
+      body+='<p>Keep your iPhone unlocked and connected. Apple sign-in is in progress. If Apple requires a trusted-device verification code, the entry field will appear automatically here.</p><div class="sl-screen-meter"><span style="width:'+percent+'%"></span></div>'+
         '<ol class="sl-screen-stages">'+stages.map((n,i)=>'<li class="'+(i===idx?"active":i<idx?"done":"")+'">'+n+'</li>').join("")+'</ol>';
     }
     body+='<details class="sl-screen-details"><summary>Technical details</summary><pre>'+esc((jobLines||[]).slice(-35).join("\n")||"Starting…")+'</pre></details>';
@@ -169,6 +172,9 @@ function slWireScreen(){
   on("sl-screen-remove-account","onclick",slConfirmAccount);
   on("sl-screen-clear-logs","onclick",slClearLogs);
   on("sl-screen-otp-form","onsubmit",slVerifyCode);
+  const otp=document.getElementById("sl-screen-otp");
+  if(otp&&!slOtpWasVisible)otp.focus();
+  slOtpWasVisible=!!otp;
   on("sl-screen-cancel","onclick",async()=>{
     try{await api("/api/job/cancel",{json:{}});await poll();}
     catch(e){slFlowError=e.message;render();}
