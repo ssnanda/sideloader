@@ -155,7 +155,7 @@ if marker not in h:
     h = replace(h,
                 '  on("reload", "onclick", loadLogs);',
                 '  on("reload", "onclick", loadLogs);\n' +
-                (overlays / 'apps-dashboard-wire.js').read_text(),
+                (overlays / 'apps-dashboard-wire.js').read_text().rstrip('\n'),
                 'apps manager events')
     css = (overlays / 'apps-dashboard.css').read_text()
     h = replace(h, '</style>', css + '\n</style>', 'compact responsive styling')
