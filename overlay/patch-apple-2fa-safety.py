@@ -219,6 +219,28 @@ if '<h2>Verification Code</h2><p>Enter the code sent to your Apple devices.</p>'
         '<h2>Apple Verification Code</h2><p>Apple sends the six-digit code to your trusted devices when this sign-in reaches verification. Enter it here to continue this same installation attempt.</p>',
         'explain code delivery at active 2FA prompt')
 
+# Expose whether the real AltServer console callback ever requested 2FA.
+# This distinguishes Apple failures before 2FA from a code challenge that
+# genuinely reached the SideLoader PTY. Notification text alone is not enough.
+jobs = change(jobs,
+    '        self.verification_deadline = None\n        self.timed_out_2fa = False',
+    '        self.verification_deadline = None\n'
+    '        self.timed_out_2fa = False\n'
+    '        self.verification_challenge_seen = False',
+    'record actual verification challenge')
+jobs = change(jobs,
+    '            if self.needs_input and self.verification_deadline is None:\n'
+    '                self.verification_deadline = time.monotonic() + 60',
+    '            if self.needs_input and self.verification_deadline is None:\n'
+    '                self.verification_challenge_seen = True\n'
+    '                self.verification_deadline = time.monotonic() + 60',
+    'mark challenge when PTY asks for input')
+jobs = change(jobs,
+    '                "verification_seconds_remaining": max(0, int(self.verification_deadline - time.monotonic() + 0.999)) if self.verification_deadline is not None else None,',
+    '                "verification_challenge_seen": self.verification_challenge_seen,\n'
+    '                "verification_seconds_remaining": max(0, int(self.verification_deadline - time.monotonic() + 0.999)) if self.verification_deadline is not None else None,',
+    'report whether a code was ever requested')
+    
 # No partial application on unknown layouts.
 job_file.write_text(jobs)
 page_file.write_text(page)
