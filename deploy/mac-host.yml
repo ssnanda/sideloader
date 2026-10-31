@@ -10,6 +10,12 @@ services:
       UI_PORT: "38080"
       # October 2026 Apple -80046: the local Android anisette is no longer accepted.
       ANISETTE_SERVER: "${SIDELOADER_ANISETTE_SERVER:-https://mac-ani.jkcoxson.com}"
+      # AltStore's Oct 2026 fix matches GrandSlam User-Agent to the anisette
+      # identity. mac-ani.jkcoxson.com currently reports this Mac akd UA.
+      # AltServer-Linux NG honors ALTSERVER_GSA_USER_AGENT; do not override
+      # X-Mme-Client-Info, which must remain the provider's provisioned value.
+      # Custom anisette providers can supply a matching override.
+      ALTSERVER_GSA_USER_AGENT: "${SIDELOADER_GSA_USER_AGENT:-akd/1.0 CFNetwork/811.5.4 Darwin/16.7.0}"
       ALLOW_HTTP_SOURCES: "${ALLOW_HTTP_SOURCES:-0}"
       ALLOW_PRIVATE_SOURCE_URLS: "${ALLOW_PRIVATE_SOURCE_URLS:-0}"
     volumes: !override
