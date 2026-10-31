@@ -111,6 +111,8 @@ class TwoFactorTests(unittest.TestCase):
         self.assertIn('enter|type|provide', before[0])
         self.assertIn('button.disabled = true',before[1])
         self.assertIn('verification_deadline',before[0])
+        self.assertIn('self.verification_delivery = "not_reported"', before[0])
+        self.assertIn('"verification_delivery": self.verification_delivery', PATCHER.read_text())
         self.assertIn('time.monotonic() + 60',before[0])
         self.assertIn('input.value = ""',before[1])
         self.assertNotIn('AltServer',before[0])
@@ -153,7 +155,9 @@ class TwoFactorTests(unittest.TestCase):
             for invalid in ('12','12345','1234567','abcdef','12 3456','12345\nmore'):
                 with self.assertRaises(ValueError): job.send(invalid)
             with self.assertRaises(RuntimeError):job.send('123456')
+            self.assertEqual(job.verification_delivery, 'not_reported')
             job.add('Apple already sent a verification code to trusted devices (hsc 409).\n')
+            self.assertEqual(job.verification_delivery, 'reported_sent')
             self.assertFalse(job.needs_input)
             self.assertFalse(job.verification_challenge_seen)
             # Exact PTY prompt emitted by AltServer-Linux makefiles/rewrite_altserver_source.py.
@@ -162,6 +166,7 @@ class TwoFactorTests(unittest.TestCase):
             job.add('code\n')
             self.assertTrue(job.needs_input)
             self.assertTrue(job.verification_challenge_seen)
+            self.assertEqual(job.verification_delivery, 'reported_sent')
             self.assertIsNotNone(job.verification_deadline)
             self.assertGreater(job.verification_deadline - module.time.monotonic(), 50)
             job.send('123456')
@@ -197,9 +202,34 @@ class TwoFactorTests(unittest.TestCase):
         self.assertFalse(job.needs_input)
         self.assertFalse(job.verification_challenge_seen)
         self.assertIsNone(job.verification_deadline)
+        self.assertEqual(job.verification_delivery, 'not_reported')
         job.add('Apple already sent a verification code to trusted devices (hsc 409).\\n')
         self.assertFalse(job.needs_input)
         self.assertFalse(job.verification_challenge_seen)
+
+    def test_explicit_2fa_prompt_does_not_claim_apple_sent_a_code(self):
+        pkg=self.patched()
+        package=types.ModuleType('fake_explicit_challenge')
+        package.__path__=[str(pkg)]
+        config=types.ModuleType('fake_explicit_challenge.config')
+        config.read=lambda:{'APPLE_PASSWORD':'unit-test-secret'}
+        sys.modules.update({'fake_explicit_challenge':package,
+                            'fake_explicit_challenge.config':config})
+        self.addCleanup(lambda:sys.modules.pop('fake_explicit_challenge.jobs',None))
+        self.addCleanup(lambda:sys.modules.pop('fake_explicit_challenge.config',None))
+        self.addCleanup(lambda:sys.modules.pop('fake_explicit_challenge',None))
+        spec=importlib.util.spec_from_file_location('fake_explicit_challenge.jobs',pkg/'jobs.py')
+        module=importlib.util.module_from_spec(spec)
+        sys.modules[spec.name]=module
+        spec.loader.exec_module(module)
+        job=module.Job('refresh','Install')
+        self.assertEqual(job.verification_delivery,'not_reported')
+        job.add('Enter two factor code\n')
+        self.assertTrue(job.needs_input)
+        self.assertEqual(job.verification_delivery,'requested_unconfirmed')
+        job.add('Apple already sent a verification code to trusted devices (hsc 409).\n')
+        self.assertEqual(job.verification_delivery,'reported_sent')
+        self.assertTrue(job.needs_input)
 
     def test_frontend_javascript_syntax(self):
         pkg=self.patched()
