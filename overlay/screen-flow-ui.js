@@ -3,10 +3,10 @@ let slFlow=null, slFlowError="", slFlowBusy=false;
 
 function slScreen(mode,data={}) {
   slFlow={...data,mode}; slFlowError="";
-  view="apps"; history.replaceState(null,"","#apps");
+  view=data.screenView==="activity"?"activity":"apps"; history.replaceState(null,"","#"+view);
   lastPage=null; render(); window.scrollTo({top:0,behavior:"smooth"});
 }
-function slHome(){slFlow=null;slFlowError="";lastPage=null;render();}
+function slHome(){slFlow=null;slFlowError="";lastPage=null;render();if(view==="activity")loadLogs();}
 function slMessage(title,message){slScreen("message",{title,message});}
 function slInstall(app,udid,installed=false){
   if(!app||!udid)return slMessage("Select an iPhone","Choose an iPhone and an app first.");
@@ -40,6 +40,10 @@ function slScreenView(){
       (f.names||[]).map(n=>'<li>'+esc(n)+'</li>').join("")+
       '</ul><p class="sl-screen-note">Saved IPA files remain. This does not sign in to Apple.</p>';
     buttons='<button type="button" class="btn sl-screen-danger" id="sl-screen-uninstall">Remove from iPhone</button>';
+  }else if(f.mode==="logs"){
+    title="Clear Activity logs";
+    body='<div class="sl-screen-emoji">🧹</div><h2>Delete old Activity logs?</h2><p>This permanently clears saved signing logs and completed job output. Saved IPAs, pairing, Apple credentials and the signing safety lock remain unchanged.</p><p class="sl-screen-note">No Apple sign-in is started. Logs cannot be cleared during an active job.</p>';
+    buttons='<button type="button" class="btn sl-screen-danger" id="sl-screen-clear-logs">Clear old logs</button>';
   }else if(f.mode==="account"){
     title="Remove Apple Account";
     body='<div class="sl-screen-emoji">🔐</div><h2>Delete saved credentials?</h2><p>SideLoader removes your saved Apple Account credentials and disables renewal. Saved IPAs and pairing remain.</p>';
@@ -74,8 +78,9 @@ function slScreenView(){
     title=f.title||"Notice";
     body='<div class="sl-screen-emoji">ℹ️</div><h2>'+esc(title)+'</h2><p>'+esc(f.message||"")+'</p>';
   }
+  const context=f.screenView==="activity"?"Activity":"Apps / Step 3";
   return '<section class="sl-screen" aria-label="'+esc(title)+'">'+
-    '<div class="sl-screen-top"><button type="button" class="cap" id="sl-screen-back">← Apps</button><span>Apps / Step 3</span></div>'+
+    '<div class="sl-screen-top"><button type="button" class="cap" id="sl-screen-back">← '+(f.screenView==="activity"?"Activity":"Apps")+'</button><span>'+context+'</span></div>'+
     '<div class="sl-screen-body">'+body+(slFlowError?'<p class="sl-screen-error" role="alert">'+esc(slFlowError)+'</p>':"")+
     '<div class="sl-screen-actions">'+buttons+'</div></div></section>';
 }
@@ -136,6 +141,14 @@ async function slConfirmAccount(){
     slMessage("Account removed","Saved credentials were cleared; your apps and pairing were preserved.");
   }catch(e){slFlowBusy=false;slFlowError=e.message;render();}
 }
+async function slClearLogs(){
+  if(slFlowBusy)return;
+  slFlowBusy=true;render();
+  try{
+    await api("/api/logs/clear",{json:{acknowledge:true}});
+    slFlowBusy=false;slScreen("message",{title:"Logs cleared",message:"Old Activity logs were deleted. The signing safety lock and saved apps were preserved.",screenView:"activity"});
+  }catch(e){slFlowBusy=false;slFlowError=e.message;render();}
+}
 async function slVerifyCode(e){
   e.preventDefault();
   const input=document.getElementById("sl-screen-otp");
@@ -154,6 +167,7 @@ function slWireScreen(){
   on("sl-screen-resume","onclick",slResume);
   on("sl-screen-uninstall","onclick",slConfirmRemove);
   on("sl-screen-remove-account","onclick",slConfirmAccount);
+  on("sl-screen-clear-logs","onclick",slClearLogs);
   on("sl-screen-otp-form","onsubmit",slVerifyCode);
   on("sl-screen-cancel","onclick",async()=>{
     try{await api("/api/job/cancel",{json:{}});await poll();}
@@ -162,4 +176,5 @@ function slWireScreen(){
   // Override legacy handlers which used window.confirm().
   on("sideloader-resume","onclick",()=>slScreen("resume"));
   on("sideloader-remove-account","onclick",()=>slScreen("account"));
+  on("sideloader-clear-logs","onclick",()=>slScreen("logs",{screenView:"activity"}));
 }
