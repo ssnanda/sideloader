@@ -204,11 +204,15 @@ class DashboardPatchTests(unittest.TestCase):
             self.assertNotEqual(a.returncode,0)
             self.assertEqual((p/'server.py').read_text(),SERVER)
 
-    def test_install_click_explains_signing_lock_without_starting_apple_request(self):
+    def test_install_click_uses_in_page_signing_lock_screen(self):
         ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
-        self.assertIn('if (S.signing_guard?.blocked) return window.alert(', ui)
-        self.assertIn('No new Apple sign-in was started.', ui)
-        self.assertNotIn('Boolean(row.managed) && blocked', ui)
+        flow=(ROOT/'overlay'/'screen-flow-ui.js').read_text()
+        self.assertIn('slInstall(app, udid, installed);',ui)
+        self.assertIn('S.signing_guard?.blocked?"paused":"confirm"',flow)
+        self.assertIn('No new Apple request was started',flow)
+        self.assertNotIn('window.alert(',ui)
+        self.assertNotIn('window.confirm(',ui)
+        self.assertNotIn('Boolean(row.managed) && blocked',ui)
 
     def test_step3_source_catalog_and_device_verification(self):
         ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
@@ -227,15 +231,17 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertNotIn("installed?'Update':'Install'",sources)
         self.assertNotIn("install_now:true",sources)
 
-    def test_install_job_dialog_and_sources_handoff(self):
+    def test_sources_only_manage_lists_and_apps_owns_installation(self):
         patcher=(ROOT/'overlay'/'patch-apps-dashboard.py').read_text()
+        screen=(ROOT/'overlay'/'patch-screen-flow.py').read_text()
         sources=(ROOT/'overlay'/'sources.html').read_text()
-        self.assertIn('await pullJob();',patcher)
-        self.assertIn('renderSheet();',patcher)
-        self.assertIn('Installation was not started:',patcher)
-        self.assertIn('sessionStorage.getItem("sideloaderPendingJob")',patcher)
-        self.assertIn("sessionStorage.setItem('sideloaderPendingJob'",sources)
-        self.assertIn("location.href='/#apps'",sources)
+        self.assertIn("screen-flow-ui.js",patcher)
+        self.assertIn("wire_start =",patcher)
+        self.assertIn("slScreenView() : appsView()",screen)
+        self.assertIn("slWireScreen();",screen)
+        self.assertIn("sourceConfirm(",sources)
+        self.assertNotIn("install_now:true",sources)
+        self.assertNotIn("window.confirm(",sources)
 
     def test_sideloaded_filter_defaults_on_and_preserves_selection(self):
         ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
@@ -272,7 +278,8 @@ class DashboardPatchTests(unittest.TestCase):
         if subprocess.run(['which','node'],capture_output=True).returncode: self.skipTest('node missing')
         src=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
         wire=(ROOT/'overlay'/'apps-dashboard-wire.js').read_text()
-        full=src+'\nfunction wire(){const on=()=>{};\n'+wire+'\n}\n'
+        flow=(ROOT/'overlay'/'screen-flow-ui.js').read_text()
+        full=src+'\n'+flow+'\nfunction wire(){const on=()=>{};\n'+wire+'\n}\n'
         out=subprocess.run(['node','--check'],input=full,text=True,capture_output=True)
         self.assertEqual(out.returncode,0,out.stderr)
 
