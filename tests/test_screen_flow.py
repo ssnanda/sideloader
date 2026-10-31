@@ -86,6 +86,10 @@ class ScreenFlowTests(unittest.TestCase):
         self.assertIn('id="sl-screen-otp"', flow)
         self.assertIn('id="sl-screen-install"', flow)
         self.assertIn('id="sl-screen-uninstall"', flow)
+        self.assertIn('document.querySelectorAll("[data-sign]")', flow)
+        self.assertIn('slInstall(app,udid,installed);', flow)
+        self.assertIn('on("signall","onclick"', flow)
+        self.assertIn('on("sideloader-clear-logs","onclick"', flow)
         self.assertIn('sourceConfirm(', sources)
 
     def test_javascript_syntax(self):
