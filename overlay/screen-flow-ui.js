@@ -59,6 +59,24 @@ function slScreenView(){
     title=verifying?"Apple verification":failed?"Installation failed":good?"Installation complete":esc(j?.title||f.title||"Installing…");
     body='<div class="sl-screen-emoji">'+(verifying?"🔢":failed?"⚠️":good?"✅":"⚙️")+
       '</div><h2>'+title+'</h2>';
+    // Source of truth: an hsc=409 report is evidence Apple initiated a code,
+    // NOT proof that it appeared on this particular iPhone. Other prompts
+    // only prove that AltServer requested a code.
+    if(j?.kind==="refresh" || (!j && f.title==="Installing app")){
+      const delivery=j?.verification_delivery||"not_reported";
+      const sent=delivery==="reported_sent";
+      const requested=delivery==="requested_unconfirmed";
+      const label=sent?"Apple reports verification code sent":
+        requested?"Verification code requested · delivery unconfirmed":
+        "Verification code not reported sent";
+      const info=sent?
+        "Apple reported sending a code to your trusted devices. SideLoader cannot confirm it arrived on your iPhone.":
+        requested?
+        "AltServer is asking for a code, but Apple has not confirmed sending one in the available status.":
+        "Apple has not reported sending a verification code during this attempt.";
+      body+='<div class="sl-screen-delivery '+(sent?"reported":requested?"requested":"pending")+
+        '" role="status" aria-live="polite"><strong>'+label+'</strong><p>'+info+'</p></div>';
+    }
     if(verifying){
       body+='<p>AltServer has requested the six-digit verification code. Check your trusted Apple device. If no code arrived, do not enter a guessed code; this attempt will cancel in '+(j.verification_seconds_remaining??60)+' seconds.</p>'+
         '<form id="sl-screen-otp-form" novalidate><label for="sl-screen-otp">Six-digit code</label>'+
