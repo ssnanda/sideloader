@@ -88,11 +88,12 @@ replace_once(
 
 # Poll the live job promptly when the trusted-device challenge arrives.
 # Backend requests are read-only; no new Apple sign-in or OTP request occurs.
-replace_once(
-    'pollT = setTimeout(poll, busy ? 1500 : 8000);',
-    'pollT = setTimeout(poll, busy ? (S.job?.needs_input ? 500 : 800) : 8000);',
-    'verification screen latency'
-)
+if 'pollT = setTimeout(poll,' in page:
+    replace_once(
+        'pollT = setTimeout(poll, busy ? 1500 : 8000);',
+        'pollT = setTimeout(poll, busy ? (S.job?.needs_input ? 500 : 800) : 8000);',
+        'verification screen latency'
+    )
 
 # Returning to the dashboard while an install is running restores its screen.
 boot_start = page.find("async function boot() {")
