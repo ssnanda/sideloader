@@ -38,9 +38,16 @@ replace_once(
 
 # Keep the Apps tab visible but switch its content to an entire new screen
 # for confirmations, progress, code entry, failure and completion.
+activity_route = ('view === "apps" ? (slFlow ? slScreenView() : appsView()) '
+                  ': (slFlow?.screenView === "activity" ? slScreenView() : activityView())')
+# Migrate an already locally patched dashboard without requiring a reset.
+page = page.replace(
+    'view === "apps" ? (slFlow ? slScreenView() : appsView()) : activityView()',
+    activity_route
+)
 replace_once(
     'view === "apps" ? appsView() : activityView()',
-    'view === "apps" ? (slFlow ? slScreenView() : appsView()) : activityView()',
+    activity_route,
     "screen navigation"
 )
 
