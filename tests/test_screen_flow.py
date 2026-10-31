@@ -86,11 +86,23 @@ class ScreenFlowTests(unittest.TestCase):
         self.assertIn('id="sl-screen-otp"', flow)
         self.assertIn('id="sl-screen-install"', flow)
         self.assertIn('id="sl-screen-uninstall"', flow)
+        self.assertIn('verification_challenge_seen', flow)
+        self.assertIn('ended before AltServer requested a verification code', flow)
+        self.assertIn('AltServer has requested the six-digit verification code', flow)
+        self.assertIn('slOtpWasVisible', flow)
+        self.assertIn('otp.focus()', flow)
         self.assertIn('document.querySelectorAll("[data-sign]")', flow)
         self.assertIn('slInstall(app,udid,installed);', flow)
         self.assertIn('on("signall","onclick"', flow)
         self.assertIn('on("sideloader-clear-logs","onclick"', flow)
         self.assertIn('sourceConfirm(', sources)
+
+    def test_polling_exposes_challenge_without_waiting_for_activity(self):
+        patch=(ROOT/"overlay"/"patch-screen-flow.py").read_text()
+        self.assertIn("S.job?.needs_input ? 500 : 800", patch)
+        self.assertIn('S.job.needs_input && S.job.accepts_input', patch)
+        self.assertIn('view = "apps"', patch)
+        self.assertIn('slFlow = {mode:"job",jobId:S.job.id', patch)
 
     def test_javascript_syntax(self):
         if subprocess.run(["which", "node"], capture_output=True).returncode:
