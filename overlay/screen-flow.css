@@ -13,6 +13,12 @@
 .sl-screen-error{color:var(--red,#d33);border:1px solid currentColor;padding:12px;border-radius:12px}
 .sl-screen-meter{height:10px;background:rgba(120,120,130,.18);border-radius:999px;margin:22px 0 12px;overflow:hidden}
 .sl-screen-meter span{display:block;height:100%;background:linear-gradient(90deg,#218fee,#8c60e8);transition:width .4s ease}
+.sl-screen-delivery{margin:18px 0;padding:15px 17px;border-radius:14px;border:1px solid rgba(120,120,130,.22);background:rgba(120,120,130,.07)}
+.sl-screen-delivery strong{display:block;font-size:15px;line-height:1.35}
+.sl-screen-delivery p{font-size:13px;margin:7px 0 0;line-height:1.5}
+.sl-screen-delivery.reported{background:rgba(31,154,93,.09);border-color:rgba(31,154,93,.35)}
+.sl-screen-delivery.requested{background:rgba(216,156,43,.09);border-color:rgba(216,156,43,.35)}
+.sl-screen-delivery.pending{background:rgba(120,120,130,.07)}
 .sl-screen-stages{padding-left:24px;line-height:2.3;color:var(--label-2)}
 .sl-screen-stages .active{color:var(--label);font-weight:800}
 .sl-screen-stages .done{color:var(--green,#25a65c)}
