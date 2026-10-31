@@ -173,6 +173,18 @@ function slWireScreen(){
     try{await api("/api/job/cancel",{json:{}});await poll();}
     catch(e){slFlowError=e.message;render();}
   });
+  // Older Step 3 install buttons use data-sign (not the Apps manager
+  // data-device-app-action handler). Both must show the same confirmation
+  // screen before a single Apple authentication request is permitted.
+  document.querySelectorAll("[data-sign]").forEach(button => {
+    button.onclick = () => {
+      const app=(S.apps||[]).find(a=>a.id===button.dataset.sign);
+      const udid=button.dataset.dev||(S.registered||[])[0]?.udid;
+      const installed=Boolean(app?.targets?.some(t=>t.udid===udid&&t.installation?.state==="installed"));
+      slInstall(app,udid,installed);
+    };
+  });
+  on("signall","onclick",()=>slMessage("Choose one app","Use Install or Re-sign on an app in Step 3. Bulk signing is not started."));
   // Override legacy browser confirmation handlers with in-page screens.
   on("sideloader-resume","onclick",()=>slScreen("resume"));
   on("useipa","onclick",async()=>{
