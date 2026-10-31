@@ -173,7 +173,7 @@ function slWireScreen(){
     try{await api("/api/job/cancel",{json:{}});await poll();}
     catch(e){slFlowError=e.message;render();}
   });
-  // Override legacy handlers which used window.confirm().
+  // Override legacy browser confirmation handlers with in-page screens.
   on("sideloader-resume","onclick",()=>slScreen("resume"));
   on("useipa","onclick",async()=>{
     if(!pending?.filename)return slMessage("No IPA selected","Choose an IPA in Step 3 first.");
