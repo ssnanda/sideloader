@@ -235,11 +235,12 @@ jobs = change(jobs,
     '                self.verification_challenge_seen = True\n'
     '                self.verification_deadline = time.monotonic() + 60',
     'mark challenge when PTY asks for input')
-jobs = change(jobs,
-    '                "verification_seconds_remaining": max(0, int(self.verification_deadline - time.monotonic() + 0.999)) if self.verification_deadline is not None else None,',
-    '                "verification_challenge_seen": self.verification_challenge_seen,\n'
-    '                "verification_seconds_remaining": max(0, int(self.verification_deadline - time.monotonic() + 0.999)) if self.verification_deadline is not None else None,',
-    'report whether a code was ever requested')
+if 'def view(self, since=None):' in jobs:
+    jobs = change(jobs,
+        '                "verification_seconds_remaining": max(0, int(self.verification_deadline - time.monotonic() + 0.999)) if self.verification_deadline is not None else None,',
+        '                "verification_challenge_seen": self.verification_challenge_seen,\n'
+        '                "verification_seconds_remaining": max(0, int(self.verification_deadline - time.monotonic() + 0.999)) if self.verification_deadline is not None else None,',
+        'report whether a code was ever requested')
     
 # No partial application on unknown layouts.
 job_file.write_text(jobs)
