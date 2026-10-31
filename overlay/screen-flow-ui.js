@@ -72,7 +72,7 @@ function slScreenView(){
         requested?"Verification code requested · delivery unconfirmed":
         "Verification code not reported sent";
       const info=sent?
-        "Apple reported sending a code to your trusted devices. SideLoader cannot confirm it arrived on your iPhone.":
+        "Apple reported sending a verification code to your trusted devices.":
         requested?
         "AltServer is asking for a code, but Apple has not confirmed sending one in the available status.":
         "Apple has not reported sending a verification code during this attempt.";
