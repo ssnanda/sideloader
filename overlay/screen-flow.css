@@ -1,0 +1,26 @@
+/* SideLoader in-page workflow v1 — full Apps screen, never modal. */
+.sl-screen{width:100%;max-width:760px;margin:0 auto;min-height:calc(100dvh - 220px);padding:16px 0 32px}
+.sl-screen-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:24px;color:var(--label-2);font-size:13px;font-weight:600}
+.sl-screen-top .cap{min-height:40px}
+.sl-screen-body{background:var(--card,rgba(127,127,127,.065));border:1px solid var(--line,rgba(127,127,127,.2));border-radius:22px;padding:clamp(22px,5vw,38px);overflow-wrap:anywhere}
+.sl-screen-body h2{font-size:clamp(23px,4vw,31px);letter-spacing:-.03em;margin:12px 0}
+.sl-screen-body p{line-height:1.6;max-width:65ch}
+.sl-screen-emoji{display:flex;align-items:center;justify-content:center;width:66px;height:66px;border-radius:19px;background:linear-gradient(145deg,#3696ee,#8d62ec);font-size:34px;box-shadow:0 8px 22px rgba(47,110,220,.18)}
+.sl-screen-note{padding:14px 16px;border-radius:14px;background:rgba(110,128,162,.11);border:1px solid rgba(110,128,162,.2)}
+.sl-screen-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:24px}
+.sl-screen-actions .btn{min-height:48px;min-width:180px}
+.sl-screen-danger{background:#c33131!important;color:white!important}
+.sl-screen-error{color:var(--red,#d33);border:1px solid currentColor;padding:12px;border-radius:12px}
+.sl-screen-meter{height:10px;background:rgba(120,120,130,.18);border-radius:999px;margin:22px 0 12px;overflow:hidden}
+.sl-screen-meter span{display:block;height:100%;background:linear-gradient(90deg,#218fee,#8c60e8);transition:width .4s ease}
+.sl-screen-stages{padding-left:24px;line-height:2.3;color:var(--label-2)}
+.sl-screen-stages .active{color:var(--label);font-weight:800}
+.sl-screen-stages .done{color:var(--green,#25a65c)}
+.sl-screen-details{margin-top:24px;font-size:13px}
+.sl-screen-details summary{cursor:pointer;font-weight:600}
+.sl-screen-details pre{max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border-radius:12px;background:rgba(120,120,130,.08);font-size:11px}
+#sl-screen-otp-form{display:flex;flex-direction:column;align-items:stretch;gap:12px;max-width:340px;margin-top:24px}
+#sl-screen-otp-form label{font-size:14px;font-weight:700}
+#sl-screen-otp{font-size:28px;letter-spacing:.3em;max-width:100%;width:100%;border:1px solid rgba(128,128,128,.4);border-radius:12px;padding:14px;background:var(--bg,transparent);color:var(--label)}
+#sl-screen-otp-form .btn{min-height:48px}
+@media(max-width:600px){.sl-screen{padding:4px 0 26px}.sl-screen-body{border-radius:18px;padding:22px 17px}.sl-screen-actions .btn{width:100%}}
