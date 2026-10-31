@@ -59,6 +59,7 @@ function settingsView() {
   ${altserverBackendCard()}
   `;
 }
+function startJob(path, body={}) { return act(async () => { const r = await api(path, {json: body}); if (r.job) watched.add(r.job); }); }
 function wire() {
   const on = (name,event,fun)=>{};
   on("reload", "onclick", loadLogs);
