@@ -91,7 +91,7 @@ class ScreenFlowTests(unittest.TestCase):
         self.assertIn('Apple reports verification code sent', flow)
         self.assertIn('Verification code requested · delivery unconfirmed', flow)
         self.assertIn('Verification code not reported sent', flow)
-        self.assertIn('SideLoader cannot confirm it arrived on your iPhone', flow)
+        self.assertIn('Apple reported sending a verification code to your trusted devices.', flow)
         self.assertIn('ended before AltServer requested a verification code', flow)
         self.assertIn('const sent=!!(j?.running', flow)
         self.assertIn('const showOtp=verifying||sent;', flow)
