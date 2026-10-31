@@ -155,8 +155,13 @@ class TwoFactorTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):job.send('123456')
             job.add('Apple already sent a verification code to trusted devices (hsc 409).\n')
             self.assertFalse(job.needs_input)
-            job.add('Enter verification code: ')
+            self.assertFalse(job.verification_challenge_seen)
+            # Exact PTY prompt emitted by AltServer-Linux makefiles/rewrite_altserver_source.py.
+            job.add('Enter two factor ')
+            self.assertFalse(job.needs_input)
+            job.add('code\n')
             self.assertTrue(job.needs_input)
+            self.assertTrue(job.verification_challenge_seen)
             self.assertIsNotNone(job.verification_deadline)
             self.assertGreater(job.verification_deadline - module.time.monotonic(), 50)
             job.send('123456')
@@ -172,6 +177,29 @@ class TwoFactorTests(unittest.TestCase):
         auto.fd=42
         auto.needs_input=True
         with self.assertRaises(RuntimeError):auto.send('123456')
+
+    def test_early_apple_failure_never_requests_otp(self):
+        pkg=self.patched()
+        package=types.ModuleType('fake_early_auth'); package.__path__=[str(pkg)]
+        config=types.ModuleType('fake_early_auth.config')
+        config.read=lambda:{'APPLE_PASSWORD':'unit-test-secret'}
+        sys.modules.update({'fake_early_auth':package,'fake_early_auth.config':config})
+        self.addCleanup(lambda:sys.modules.pop('fake_early_auth.jobs',None))
+        self.addCleanup(lambda:sys.modules.pop('fake_early_auth.config',None))
+        self.addCleanup(lambda:sys.modules.pop('fake_early_auth',None))
+        spec=importlib.util.spec_from_file_location('fake_early_auth.jobs',pkg/'jobs.py')
+        mod=importlib.util.module_from_spec(spec)
+        sys.modules[spec.name]=mod
+        spec.loader.exec_module(mod)
+        job=mod.Job('refresh','Install')
+        job.add('Installing app...\\n')
+        job.add('Unable to sign you in to your Apple Account. Try again later. (-36607)\\n')
+        self.assertFalse(job.needs_input)
+        self.assertFalse(job.verification_challenge_seen)
+        self.assertIsNone(job.verification_deadline)
+        job.add('Apple already sent a verification code to trusted devices (hsc 409).\\n')
+        self.assertFalse(job.needs_input)
+        self.assertFalse(job.verification_challenge_seen)
 
     def test_frontend_javascript_syntax(self):
         pkg=self.patched()
