@@ -242,6 +242,36 @@ if 'def view(self, since=None):' in jobs:
         '                "verification_seconds_remaining": max(0, int(self.verification_deadline - time.monotonic() + 0.999)) if self.verification_deadline is not None else None,',
         'report whether a code was ever requested')
     
+# Track Apple's explicit "already sent" signal separately from console input.
+# A normal 2FA console challenge is not proof of successful notification
+# delivery. This read-only state never sends another Apple request.
+jobs = change(jobs,
+    '        self.verification_challenge_seen = False',
+    '        self.verification_challenge_seen = False\n'
+    '        self.verification_delivery = "not_reported"',
+    'initialize delivery status')
+jobs = change(jobs,
+    '                self._track(t)\n                if hidden(t):',
+    '                self._track(t)\n'
+    '                if "Apple already sent a verification code to trusted devices (hsc 409)" in t:\n'
+    '                    self.verification_delivery = "reported_sent"\n'
+    '                if hidden(t):',
+    'capture explicit Apple hsc 409 report')
+jobs = change(jobs,
+    '                self.verification_challenge_seen = True\n'
+    '                self.verification_deadline = time.monotonic() + 60',
+    '                self.verification_challenge_seen = True\n'
+    '                if self.verification_delivery != "reported_sent":\n'
+    '                    self.verification_delivery = "requested_unconfirmed"\n'
+    '                self.verification_deadline = time.monotonic() + 60',
+    'differentiate requested code from reported-sent code')
+if 'def view(self, since=None):' in jobs:
+    jobs = change(jobs,
+        '                "verification_challenge_seen": self.verification_challenge_seen,',
+        '                "verification_challenge_seen": self.verification_challenge_seen,\n'
+        '                "verification_delivery": self.verification_delivery,',
+        'publish delivery status on active installation job')
+
 # No partial application on unknown layouts.
 job_file.write_text(jobs)
 page_file.write_text(page)
