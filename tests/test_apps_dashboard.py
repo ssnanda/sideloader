@@ -292,6 +292,14 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertNotIn('id="sideloader-device-app-sync"', ui)
         self.assertIn('Installed apps', ui)
 
+    def test_installed_apps_use_compact_readable_cards(self):
+        css=(ROOT/'overlay'/'apps-dashboard.css').read_text()
+        patch=(ROOT/'overlay'/'patch-apps-dashboard.py').read_text()
+        self.assertIn('repeat(auto-fit,minmax(360px,1fr))', css)
+        self.assertIn('.sl-app-list>.sl-app-entry', css)
+        self.assertIn('.sl-signing-days {font-size:23px', css)
+        self.assertIn('Refresh the complete Apps stylesheet on every build', patch)
+
     def test_imported_ipa_delete_does_not_use_settings_local_helper(self):
         ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
         self.assertIn('function importedIpaRemoveButton(app)', ui)

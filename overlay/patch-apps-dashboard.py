@@ -189,10 +189,17 @@ else:
     if ws < 0 or we < 0 or we <= ws:
         sys.exit('Apps dashboard patch: cannot safely migrate event handlers')
     h = h[:ws] + (overlays / 'apps-dashboard-wire.js').read_text().rstrip('\n') + '\n' + h[we:]
-    css = (overlays / 'apps-dashboard.css').read_text()
-    filter_css = '\n.sl-app-filter{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;padding:8px 2px;cursor:pointer;}\n.sl-app-filter input{width:18px;height:18px;accent-color:var(--blue);}\n'
-    if '.sl-app-filter{' not in h:
-        h = replace(h, '</style>', filter_css + '</style>', 'filter CSS migration')
+    # Refresh the complete Apps stylesheet on every build. Older repeat builds
+    # refreshed the helper JavaScript but left stale CSS, causing giant rows,
+    # tiny text and the retired IPA block to remain visible.
+    css = (overlays / 'apps-dashboard.css').read_text().rstrip()
+    css_start = h.find('/* SideLoader compact Apps manager and version corners */')
+    css_end = h.find('/* SideLoader in-page workflow v1', css_start)
+    if css_end < 0:
+        css_end = h.find('</style>', css_start)
+    if css_start < 0 or css_end < 0 or css_end <= css_start:
+        sys.exit('Apps dashboard patch: cannot safely refresh existing Apps CSS')
+    h = h[:css_start] + css + '\n\n' + h[css_end:]
 
 # Keep the Step 3 summary about installed phone apps, not stored IPA files.
 old_apps_caption = '''deviceAppRows.length ? `${deviceAppRows.length} installed on iPhone` :
