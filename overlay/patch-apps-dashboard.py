@@ -117,8 +117,7 @@ if marker not in h:
     # Step 3 is now the one always-open Apps view. Imported IPAs are retained
     # below device scanning and selection; the standalone Install step is gone.
     new3 = '''${renderSetupStep(3, "Apps",
-  deviceAppRows.length ? `${deviceAppRows.length} installed on iPhone` :
-    apps.length ? `${apps.length} IPA${apps.length === 1 ? "" : "s"} imported · scan iPhone` : "Scan your iPhone or import an IPA",
+  deviceAppScannedFor ? `${deviceAppRows.filter(deviceAppIsSideloaded).length} installed sideloaded app${deviceAppRows.filter(deviceAppIsSideloaded).length === 1 ? "" : "s"}` : "Scan iPhone to view installed apps",
   appReady || deviceAppRows.length > 0,
   `${deviceAppsManager()}
     <div class="device-app-import-label">IMPORT AN IPA / ALTSTORE SOURCES</div>
@@ -194,6 +193,13 @@ else:
     filter_css = '\n.sl-app-filter{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;padding:8px 2px;cursor:pointer;}\n.sl-app-filter input{width:18px;height:18px;accent-color:var(--blue);}\n'
     if '.sl-app-filter{' not in h:
         h = replace(h, '</style>', filter_css + '</style>', 'filter CSS migration')
+
+# Keep the Step 3 summary about installed phone apps, not stored IPA files.
+old_apps_caption = '''deviceAppRows.length ? `${deviceAppRows.length} installed on iPhone` :
+    apps.length ? `${apps.length} IPA${apps.length === 1 ? "" : "s"} imported · scan iPhone` : "Scan your iPhone or import an IPA"'''
+new_apps_caption = '''deviceAppScannedFor ? `${deviceAppRows.filter(deviceAppIsSideloaded).length} installed sideloaded app${deviceAppRows.filter(deviceAppIsSideloaded).length === 1 ? "" : "s"}` : "Scan iPhone to view installed apps"'''
+if old_apps_caption in h:
+    h = h.replace(old_apps_caption, new_apps_caption, 1)
 
 # Route every install through the existing job sheet, even if Apple rejects it
 # before the ordinary 1.5-second polling interval. Sources carries its job ID

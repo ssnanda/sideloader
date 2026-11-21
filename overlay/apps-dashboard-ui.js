@@ -2,7 +2,7 @@
 let deviceAppTarget = null;
 let deviceAppRows = [], deviceAppSelected = new Set(), deviceAppScannedFor = null;
 let deviceAppBusy = false, deviceAppError = "";
-let deviceAppSideloadedOnly = true;
+let appAddOpen = false;
 let sourceCatalog = [], sourceCatalogError = "", sourceCatalogBusy = false;
 let sourceCatalogLoaded = false;
 
@@ -33,7 +33,10 @@ async function importSourceApp(item) {
     }});
     if (!r.app_id) throw new Error("No IPA was imported");
     await refresh();
-    slMessage("IPA imported", item.name + " is ready in Apps / Step 3. Choose Install to add it to your iPhone.");
+    const imported = (S.apps || []).find(app => app.id === r.app_id);
+    const chosen = (S.registered || []).find(d => d.udid === deviceAppTarget) || (S.registered || [])[0];
+    if (imported && chosen) singleAppSigning(imported, chosen.udid, false);
+    else slMessage("IPA imported", item.name + " is now available under Imported IPAs.");
   } catch (e) {
     slMessage("IPA import failed", e.message);
   } finally {
@@ -47,7 +50,42 @@ async function importSourceApp(item) {
 // Show confirmed developer-signed apps plus IPAs known to SideLoader by default.
 // Keep unknown-origin apps accessible with the filter unchecked.
 function deviceAppIsSideloaded(row) {
-  return Boolean(row.managed || row.origin === "Developer signed (reported)");
+  return Boolean(row.managed || row.relatedManaged || row.origin === "Developer signed (reported)");
+}
+
+function deviceBundleMatches(deviceBundle, sourceBundle) {
+  if (deviceBundle === sourceBundle) return true;
+  const prefix = sourceBundle + ".";
+  return deviceBundle.startsWith(prefix) && /^[A-Z0-9]{10}$/.test(deviceBundle.slice(prefix.length));
+}
+
+function normalizedAppName(name) {
+  return String(name || "").trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function relatedSavedApp(deviceRow, savedApps) {
+  const name = normalizedAppName(deviceRow.name);
+  if (!name) return null;
+  const matches = savedApps.filter(app => normalizedAppName(app.name) === name);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function signingDaysLeft(target, scannedExpiry=0) {
+  const expiry = target?.signature?.expiry || scannedExpiry;
+  if (!expiry) return "Signing expiry unavailable";
+  const seconds = expiry - S.now;
+  if (seconds <= 0) return "Signing expired";
+  const days = Math.ceil(seconds / 86400);
+  const total = S.config?.lifetime_days || 7;
+  return `${days} of ${total} days remaining`;
+}
+
+function sideLoaderAppIdSummary(rows) {
+  const tracked = rows.reduce((count, row) => {
+    const app = row.managed || row.relatedManaged;
+    return count + (row.scanReported && app ? 1 + (Number(app.info?.extension_count) || 0) : 0);
+  }, 0);
+  return `App IDs: ${tracked} in use (SideLoader-observed) · Apple remaining/pending unavailable`;
 }
 
 function sideLoaderVersionStrip() {
@@ -77,82 +115,77 @@ function sideLoaderVersionStrip() {
 function deviceAppsManager() {
   const devs = S.registered || [];
   const chosen = devs.find(d => d.udid === deviceAppTarget) || devs[0];
-  if (!chosen) return `<div class="foot">Connect and register your iPhone in Step 1 to scan its installed apps. Importing an IPA remains available below.</div>`;
+  if (!chosen) return `<div class="foot">Connect an iPhone in Step 1 before managing apps.</div>`;
   const udid = chosen.udid;
   const scanned = deviceAppScannedFor === udid;
-  const known = new Map((S.apps || []).map(app => [app.bundle_id, app]));
   const result = new Map();
   if (scanned) for (const row of deviceAppRows) {
-    const managed = known.get(row.bundle_id);
+    const managed = (S.apps || []).find(app => deviceBundleMatches(row.bundle_id, app.bundle_id));
+    const relatedManaged = managed ? null : relatedSavedApp(row, S.apps || []);
     const target = managed?.targets?.find(t => t.udid === udid);
     // A user-app inventory entry alone does not establish that a SideLoader
     // signing/install completed. The device/profile check must agree too.
     const confirmed = Boolean(managed && target?.installation?.state === "installed");
-    result.set(row.bundle_id, {...row, managed, installed: managed ? confirmed : Boolean(row.installed),
+    result.set(row.bundle_id, {...row, managed, relatedManaged, installed: managed ? confirmed : Boolean(row.installed),
       scanReported: Boolean(row.installed), confirmed});
   }
-  for (const app of S.apps || []) {
-    if (result.has(app.bundle_id)) continue;
-    result.set(app.bundle_id, {bundle_id:app.bundle_id, name:app.name, version:app.version,
-      origin:"IPA saved in SideLoader", installed:false, scanReported:false, confirmed:false, managed:app});
-  }
-  const allRows = [...result.values()].sort((a,b)=>a.name.localeCompare(b.name));
-  const rows = deviceAppSideloadedOnly ? allRows.filter(deviceAppIsSideloaded) : allRows;
-  const removed = scanned ? deviceAppRows.filter(a => !deviceAppSelected.has(a.bundle_id)).length : 0;
-  const addable = scanned ? rows.filter(a => !a.installed && a.managed && deviceAppSelected.has(a.bundle_id)).length : 0;
+  const rows = [...result.values()].filter(deviceAppIsSideloaded).sort((a,b)=>a.name.localeCompare(b.name));
   const busy = deviceAppBusy || Boolean(S.job?.running || S.watcher?.running);
   const blocked = Boolean(S.signing_guard?.blocked);
   const savedBundles = new Map((S.apps || []).map(app => [app.bundle_id, app]));
   const catalogRows = [...new Map(sourceCatalog.map(app => [app.bundleIdentifier, app])).values()]
     .sort((a,b) => a.name.localeCompare(b.name));
-  const catalogMarkup = `<div class="sl-source-catalog">
-    <div class="sl-app-toolbar"><b>Apps from Sources</b>
-      <button type="button" class="cap" id="sideloader-catalog-refresh" ${sourceCatalogBusy?"disabled":""}>${sourceCatalogBusy?"Loading…":"Refresh sources"}</button>
-    </div>
+  const catalogMarkup = `<section class="sl-add-category">
+    <div class="sl-add-heading"><b>From Sources</b><a href="/sources">Manage sources</a></div>
     ${sourceCatalogError?`<div class="foot">${esc(sourceCatalogError)}</div>`:""}
-    ${!sourceCatalogLoaded?`<div class="foot">Select Refresh sources to browse apps from saved sources.</div>`:
+    ${!sourceCatalogLoaded?`<div class="foot">Loading saved sources…</div>`:
       catalogRows.map(app => {
         const saved = savedBundles.get(app.bundleIdentifier);
         const currentVersion = saved?.version || "";
         const identical = saved && currentVersion === app.version;
-        // Source version is catalog information only; do not claim an update
-        // without comparing the saved IPA's version, and never infer a phone install.
-        const label = identical ? "Imported" : saved ? "Import source version" : "Import IPA";
+        const installed = rows.some(row => deviceBundleMatches(row.bundle_id, app.bundleIdentifier));
+        const label = installed && identical ? "Installed" : identical ? "Add" : saved ? "Update & add" : "Add";
         return `<div class="sl-app-entry">
           <span class="sl-app-detail"><b>${esc(app.name)}</b>
             <small>${esc(app.version)} · ${esc(app.source_name)}</small>
-            <small>${saved?"Saved IPA: "+esc(currentVersion)+" · phone installation checked separately":"Not imported"}</small>
           </span>
-          <button type="button" class="cap" data-source-app="${esc(app.bundleIdentifier)}"
-            ${identical||sourceCatalogBusy?"disabled":""}>${label}</button>
+          <button type="button" class="cap" ${identical?`data-imported-app="${esc(saved.id)}"`:`data-source-app="${esc(app.bundleIdentifier)}"`}
+            ${(installed&&identical)||sourceCatalogBusy?"disabled":""}>${label}</button>
         </div>`;
-      }).join("") || '<div class="foot">No apps in saved sources. Add a source in Sources.</div>'}
-  </div>`;
+      }).join("") || '<div class="foot">No apps available. Add or scan for sources first.</div>'}
+  </section>`;
+  const importedMarkup = `<section class="sl-add-category">
+    <div class="sl-add-heading"><b>Imported IPAs</b><button type="button" class="cap" id="sideloader-import-ipa">Import IPA</button></div>
+    ${(S.apps || []).map(app => {
+      const installed = rows.some(row => deviceBundleMatches(row.bundle_id, app.bundle_id) || row.relatedManaged?.id === app.id);
+      return `<div class="sl-app-entry"><span class="sl-app-detail"><b>${esc(app.name)}</b><small>${esc(app.version)} · ${esc(app.bundle_id)}</small></span>
+        <button type="button" class="cap" data-imported-app="${esc(app.id)}" ${busy?"disabled":""}>${installed?"Re-sign":"Install"}</button>
+        ${trash("app:", app.id, app.name)}</div>`;
+    }).join("") || '<div class="foot">No imported IPA files.</div>'}
+  </section>`;
   return `<div class="sl-app-manager">
     <div class="sl-app-toolbar">
       <label for="sideloader-app-device">iPhone</label>
       <select class="fi" id="sideloader-app-device">${devs.map(d=>`<option value="${esc(d.udid)}" ${d.udid===udid?"selected":""}>${esc(d.name||d.udid.slice(0,8))}</option>`).join("")}</select>
-      <button type="button" class="cap" id="sideloader-device-app-scan" ${busy?"disabled":""}>${deviceAppBusy?"Scanning…":"Scan apps"}</button>
-      <button type="button" class="cap solid" id="sideloader-device-app-sync" ${!scanned||busy||!(removed||addable)?"disabled":""}>Sync selection</button>
+      <button type="button" class="cap" id="sideloader-device-app-scan" ${busy?"disabled":""}>${deviceAppBusy?"Scanning…":"Scan iPhone"}</button>
+      <button type="button" class="cap solid" id="sideloader-add-app" ${busy?"disabled":""}>${appAddOpen?"Close":"Add app"}</button>
     </div>
-    <label class="sl-app-filter"><input type="checkbox" id="sideloader-sideloaded-only" ${deviceAppSideloadedOnly?"checked":""}> Sideloaded only</label>
-    <div class="foot sl-app-help">Shows identified developer-signed apps and IPAs saved in SideLoader by default. iOS may not report the origin of other sideloaded apps; uncheck to see every app. The row checkboxes still control keep/remove selections, not this filter. No Apple login during scanning.</div>
     ${deviceAppError?`<div class="foot" style="color:var(--red)">${esc(deviceAppError)}</div>`:""}
-    ${scanned?`<div class="sl-app-count">${rows.length} shown of ${allRows.length} · ${deviceAppRows.length} found on iPhone · ${removed} selected for removal · ${addable} selected for installation</div>`:
-      `<div class="sl-app-count">Scan iPhone to compare installed apps and stored IPAs.</div>`}
+    <div class="sl-installed-title"><b>Installed apps</b>${scanned?`<span>${rows.length}</span>`:""}</div>
+    ${!scanned?'<div class="sl-empty-installed">Scan this iPhone to show installed apps and signing time remaining.</div>':""}
     <div class="list sl-app-list">${rows.map(row=>{
-      const selected = scanned ? deviceAppSelected.has(row.bundle_id) : false;
       const button = row.managed ? (row.confirmed?"Re-sign":"Install") : "Remove";
-      const disabled = busy || (!row.managed && !scanned);
-      const subtitle = row.managed ? `${row.confirmed?"Installed and verified on iPhone":row.scanReported?"Reported in phone scan · installation NOT verified":"IPA saved · not installed/verified on phone"} · SideLoader IPA available` : `Reported in phone scan · ${row.origin}`;
+      const disabled = busy || (!row.managed && !row.relatedManaged && !scanned);
+      const target = row.managed?.targets?.find(t => t.udid === udid);
+      const deviceSigning = signingDaysLeft(target, row.signing_expiry);
+      const subtitle = row.relatedManaged ? `Saved IPA uses different bundle ID ${row.relatedManaged.bundle_id}` : row.bundle_id;
       return `<div class="sl-app-entry" data-bundle="${esc(row.bundle_id)}">
-        <label class="sl-app-select"><input type="checkbox" data-device-app-pick="${esc(row.bundle_id)}" ${selected?"checked":""} ${!scanned?"disabled":""} aria-label="Keep ${esc(row.name)} installed" /></label>
-        <span class="sl-app-detail"><b>${esc(row.name)}</b><small>${esc(row.bundle_id)}${row.version?" · "+esc(row.version):""}</small><small>${esc(subtitle)}</small></span>
-        <button type="button" class="cap ${row.installed?"":"solid"}" data-device-app-action="${esc(row.bundle_id)}" ${disabled?"disabled":""}>${button}</button>
+        <span class="sl-app-detail"><b>${esc(row.name)}</b><strong class="sl-signing-days">${esc(deviceSigning)}</strong><small>${esc(subtitle)}${row.version?" · "+esc(row.version):""}</small></span>
+        <button type="button" class="cap ${row.installed?"":"solid"}" data-device-app-action="${esc(row.managed?.bundle_id || row.bundle_id)}" ${disabled?"disabled":""}>${button}</button>
       </div>`;
-    }).join("") || `<div class="cell">${deviceAppSideloadedOnly?"No identified sideloaded apps. Uncheck Sideloaded only to show all.":"No saved IPAs or scanned apps to display."}</div>`}</div>
+    }).join("")}</div>
     ${blocked?`<div class="foot" style="color:var(--red)">Apple signing is paused. Scanning and removal still work; use Install to see why signing is blocked.</div>`:""}
-    ${catalogMarkup}
+    ${appAddOpen?`<div class="sl-add-apps">${catalogMarkup}${importedMarkup}</div>`:""}
   </div>`;
 }
 

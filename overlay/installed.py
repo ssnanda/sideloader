@@ -11,6 +11,7 @@ _cache = {}
 _lock = threading.Lock()
 UDID_PATTERN = re.compile(r'^[0-9A-Fa-f-]{20,64}$')
 BUNDLE_PATTERN = re.compile(r'^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$')
+TEAM_ID_PATTERN = re.compile(r'^[A-Z0-9]{10}$')
 
 
 def _run(argv, timeout=18):
@@ -31,6 +32,16 @@ def _connection_modes(udid):
     return available or [False, True]
 
 
+def _matches_signed_bundle(installed_bundle, source_bundle):
+    """Match an IPA ID or AltServer's free-team suffixed installed ID."""
+    if installed_bundle == source_bundle:
+        return True
+    prefix = source_bundle + '.'
+    return (isinstance(installed_bundle, str)
+            and installed_bundle.startswith(prefix)
+            and TEAM_ID_PATTERN.fullmatch(installed_bundle[len(prefix):]) is not None)
+
+
 def _parse_inventory(payload, bundle):
     # Debian releases print optional progress banners before the XML plist.
     start = payload.find(b'<?xml')
@@ -43,7 +54,9 @@ def _parse_inventory(payload, bundle):
         raise ValueError('installed-app plist incomplete')
     data = plistlib.loads(payload[start:end + len(b'</plist>')])
     entries = data if isinstance(data, list) else list(data.values()) if isinstance(data, dict) else []
-    return any(isinstance(row, dict) and row.get('CFBundleIdentifier') == bundle for row in entries)
+    return any(isinstance(row, dict)
+               and _matches_signed_bundle(row.get('CFBundleIdentifier'), bundle)
+               for row in entries)
 
 
 def probe(udid, bundle, use_cache=True):
@@ -61,7 +74,10 @@ def probe(udid, bundle, use_cache=True):
         argv = ['ideviceinstaller', '-u', udid]
         if network:
             argv.append('-n')
-        argv += ['list', '--user', '--xml', '--bundle-identifier', bundle]
+        # AltServer appends the Apple Team ID to free-development bundle IDs.
+        # ideviceinstaller's server-side bundle filter is exact, so filtering
+        # by the source IPA ID would hide the installed suffixed application.
+        argv += ['list', '--user', '--xml']
         try:
             response = _run(argv)
             if response.returncode:

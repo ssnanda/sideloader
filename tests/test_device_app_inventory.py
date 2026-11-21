@@ -41,9 +41,10 @@ class DeviceAppInventoryTests(unittest.TestCase):
         def runner(args,timeout=30):
             calls.append(args)
             return subprocess.CompletedProcess(args,0,stdout=data,stderr=b'')
-        with patch.object(lib,'_exec',side_effect=runner):
+        with patch.object(lib,'_exec',side_effect=runner),patch.object(lib,'_profile_expiries',return_value={BUNDLE:1893456000}):
             apps=lib.inventory(UDID)
         self.assertEqual(apps[0]['bundle_id'],BUNDLE)
+        self.assertEqual(apps[0]['signing_expiry'],1893456000)
         self.assertEqual(calls[0][:3],['ideviceinstaller','-u',UDID])
         self.assertNotIn('AltServer',str(calls))
 

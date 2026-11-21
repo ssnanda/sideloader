@@ -23,6 +23,25 @@ class InventoryTests(unittest.TestCase):
         with mock.patch.object(installed, '_connection_modes', return_value=[True]), mock.patch.object(installed, '_run', return_value=subprocess.CompletedProcess([], 0, inventory, b'')):
             self.assertEqual(installed.probe(DEVICE, BUNDLE)['state'], 'installed')
 
+    def test_altserver_team_suffix_is_installed(self):
+        inventory = plistlib.dumps([{'CFBundleIdentifier': BUNDLE + '.339U4YA5CB'}])
+        calls = []
+        def runner(argv, timeout=18):
+            calls.append(argv)
+            return subprocess.CompletedProcess([], 0, inventory, b'')
+        with mock.patch.object(installed, '_connection_modes', return_value=[False]), mock.patch.object(installed, '_run', side_effect=runner):
+            self.assertEqual(installed.probe(DEVICE, BUNDLE)['state'], 'installed')
+        self.assertNotIn('--bundle-identifier', calls[0])
+
+    def test_similar_bundle_is_not_installed(self):
+        for other in (BUNDLE + '.short', BUNDLE + '.339u4ya5cb', BUNDLE + '.339U4YA5CB.extra',
+                      'com.example.other.339U4YA5CB'):
+            with self.subTest(other=other):
+                inventory = plistlib.dumps([{'CFBundleIdentifier': other}])
+                with mock.patch.object(installed, '_connection_modes', return_value=[False]), mock.patch.object(installed, '_run', return_value=subprocess.CompletedProcess([], 0, inventory, b'')):
+                    installed._cache.clear()
+                    self.assertEqual(installed.probe(DEVICE, BUNDLE)['state'], 'missing')
+
     def test_missing(self):
         inventory = plistlib.dumps([{'CFBundleIdentifier': 'com.other.app'}])
         with mock.patch.object(installed, '_connection_modes', return_value=[False]), mock.patch.object(installed, '_run', return_value=subprocess.CompletedProcess([], 0, inventory, b'')):

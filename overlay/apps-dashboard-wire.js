@@ -16,14 +16,23 @@
     deviceAppError = "";
     render();
   });
-  on("sideloader-sideloaded-only", "onchange", e => {
-    deviceAppSideloadedOnly = e.target.checked;
+  on("sideloader-add-app", "onclick", () => {
+    appAddOpen = !appAddOpen;
+    if (appAddOpen && !sourceCatalogLoaded && !sourceCatalogBusy) loadSourceCatalog();
     render();
   });
-  on("sideloader-catalog-refresh", "onclick", loadSourceCatalog);
+  on("sideloader-import-ipa", "onclick", () => root.querySelector("#file")?.click());
   root.querySelectorAll("[data-source-app]").forEach(button => button.onclick = () => {
     const selected = sourceCatalog.find(app => app.bundleIdentifier === button.dataset.sourceApp);
     if (selected) importSourceApp(selected);
+  });
+  root.querySelectorAll("[data-imported-app]").forEach(button => button.onclick = () => {
+    const app = (S.apps || []).find(item => item.id === button.dataset.importedApp);
+    const d = root.querySelector("#sideloader-app-device");
+    if (!app || !d) return;
+    const installed = deviceAppScannedFor === d.value && deviceAppRows.some(row =>
+      deviceBundleMatches(row.bundle_id, app.bundle_id) || normalizedAppName(row.name) === normalizedAppName(app.name));
+    singleAppSigning(app, d.value, installed);
   });
   on("sideloader-device-app-scan", "onclick", () => {
     const d = root.querySelector("#sideloader-app-device");
@@ -41,7 +50,7 @@
     if (!d) return;
     const app = (S.apps || []).find(x=>x.bundle_id === bundle);
     if (app) {
-      singleAppSigning(app, d.value, Boolean(app.targets?.some(t=>t.udid===d.value && t.installation?.state==="installed") && deviceAppScannedFor===d.value && deviceAppRows.some(x=>x.bundle_id===bundle)));
+      singleAppSigning(app, d.value, Boolean(app.targets?.some(t=>t.udid===d.value && t.installation?.state==="installed") && deviceAppScannedFor===d.value && deviceAppRows.some(x=>deviceBundleMatches(x.bundle_id,bundle))));
     } else if (deviceAppScannedFor === d.value && deviceAppRows.some(x=>x.bundle_id===bundle)) {
       try { await uninstallDeviceApps(d.value,[bundle]); } catch(e) { toast(e.message); }
     }
@@ -50,7 +59,7 @@
     const d = root.querySelector("#sideloader-app-device");
     if (!d || deviceAppScannedFor !== d.value || deviceAppBusy) return toast("Scan this iPhone first.");
     const removed = deviceAppRows.filter(row=>!deviceAppSelected.has(row.bundle_id)).map(row=>row.bundle_id);
-    const missing = (S.apps||[]).filter(app=>!deviceAppRows.some(row=>row.bundle_id===app.bundle_id) && deviceAppSelected.has(app.bundle_id));
+    const missing = (S.apps||[]).filter(app=>!deviceAppRows.some(row=>deviceBundleMatches(row.bundle_id,app.bundle_id)) && deviceAppSelected.has(app.bundle_id));
     if (missing.length>1) return toast("Select only one missing IPA per sync to avoid repeated Apple sign-ins.");
     if (missing.length && S.signing_guard?.blocked) return slScreen("paused",{appId:missing[0].id,name:missing[0].name,udid:d.value,installed:false});
     if (!removed.length && !missing.length) return toast("The selected apps already match the iPhone.");

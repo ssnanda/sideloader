@@ -4,9 +4,11 @@ This can include App Store apps: installation origin is not always available.
 Never infer that every app listed by ideviceinstaller is developer-signed.
 """
 from pathlib import Path
+import datetime
 import plistlib
 import re
 import subprocess
+import tempfile
 import threading
 
 UDID = re.compile(r"^[0-9A-Fa-f-]{20,64}$")
@@ -65,6 +67,35 @@ def parse_apps(data):
     return sorted(found.values(), key=lambda x: (x['name'].lower(), x['bundle_id']))
 
 
+def _profile_expiries(udid, network=False):
+    """Return installed bundle ID -> provisioning expiry without Apple login."""
+    found = {}
+    with tempfile.TemporaryDirectory(prefix='sideloader-profiles-') as folder:
+        args = ['ideviceprovision', '-u', udid]
+        if network:
+            args.append('-n')
+        response = _exec(args + ['copy', folder], timeout=90)
+        if response.returncode:
+            return found
+        for path in Path(folder).glob('*.mobileprovision'):
+            decoded = _exec(['openssl', 'smime', '-verify', '-noverify', '-inform', 'DER',
+                             '-in', str(path)])
+            if decoded.returncode:
+                continue
+            try:
+                profile = plistlib.loads(decoded.stdout)
+            except plistlib.InvalidFileException:
+                continue
+            app_id = profile.get('Entitlements', {}).get('application-identifier', '')
+            expiry = profile.get('ExpirationDate')
+            if not isinstance(app_id, str) or '.' not in app_id or not isinstance(expiry, datetime.datetime):
+                continue
+            installed_bundle = app_id.split('.', 1)[1]
+            timestamp = int(expiry.replace(tzinfo=expiry.tzinfo or datetime.timezone.utc).timestamp())
+            found[installed_bundle] = max(timestamp, found.get(installed_bundle, 0))
+    return found
+
+
 def inventory(udid):
     """A read-only query; no signing or Apple login. Raises on offline/error."""
     if not isinstance(udid, str) or not UDID.fullmatch(udid):
@@ -78,7 +109,15 @@ def inventory(udid):
         try:
             response = _exec(args)
             if response.returncode == 0:
-                return parse_apps(response.stdout)
+                apps = parse_apps(response.stdout)
+                try:
+                    expiries = _profile_expiries(udid, network)
+                except (OSError, subprocess.TimeoutExpired):
+                    expiries = {}
+                for app in apps:
+                    if app['bundle_id'] in expiries:
+                        app['signing_expiry'] = expiries[app['bundle_id']]
+                return apps
             last = response.stderr.decode('utf-8', 'replace')[:250] or last
         except (OSError, subprocess.TimeoutExpired, plistlib.InvalidFileException,
                 ValueError, RuntimeError) as err:

@@ -221,6 +221,30 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertNotIn('window.confirm(',ui)
         self.assertNotIn('Boolean(row.managed) && blocked',ui)
 
+    def test_altserver_team_suffix_matches_saved_ipa_without_changing_removal_id(self):
+        ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
+        wire=(ROOT/'overlay'/'apps-dashboard-wire.js').read_text()
+        self.assertIn('/^[A-Z0-9]{10}$/.test', ui)
+        self.assertIn('deviceBundleMatches(row.bundle_id, app.bundle_id)', ui)
+        self.assertIn('row.managed?.bundle_id || row.bundle_id', ui)
+        self.assertIn('deviceBundleMatches(row.bundle_id,app.bundle_id)', wire)
+
+    def test_apps_manager_shows_signing_days_remaining(self):
+        ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
+        self.assertIn('function signingDaysLeft(target, scannedExpiry=0)', ui)
+        self.assertIn('Math.ceil(seconds / 86400)', ui)
+        self.assertIn('of ${total} days remaining', ui)
+        self.assertIn('function sideLoaderAppIdSummary()', ui)
+        self.assertIn('Apple remaining/pending unavailable', ui)
+        self.assertIn('row.signing_expiry', ui)
+
+    def test_unique_same_name_bundle_change_is_one_installed_row(self):
+        ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
+        self.assertIn('function relatedSavedApp(deviceRow, savedApps)', ui)
+        self.assertIn('matches.length === 1 ? matches[0] : null', ui)
+        self.assertIn('(row.managed || row.relatedManaged)?.bundle_id', ui)
+        self.assertIn('saved IPA uses different bundle ID', ui)
+
     def test_step3_source_catalog_and_device_verification(self):
         ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
         wire=(ROOT/'overlay'/'apps-dashboard-wire.js').read_text()
@@ -230,9 +254,10 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertIn('install_now:false',ui)
         self.assertIn('${catalogMarkup}',ui)
         self.assertIn('target?.installation?.state === "installed"',ui)
-        self.assertIn('installation NOT verified',ui)
-        self.assertIn('row.confirmed?"Re-sign":"Install"',ui)
-        self.assertIn('on("sideloader-catalog-refresh", "onclick", loadSourceCatalog)',wire)
+        self.assertIn('class="sl-signing-days"',ui)
+        self.assertIn('id="sideloader-add-app"',ui)
+        self.assertIn('id="sideloader-import-ipa"',ui)
+        self.assertIn('on("sideloader-add-app", "onclick"',wire)
         self.assertIn('data-source-app',wire)
         self.assertIn('loadSourceCatalog();',patch)
         self.assertNotIn("installed?'Update':'Install'",sources)
@@ -250,33 +275,31 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertNotIn("install_now:true",sources)
         self.assertNotIn("window.confirm(",sources)
 
-    def test_sideloaded_filter_defaults_on_and_preserves_selection(self):
+    def test_primary_list_only_shows_installed_sideloaded_apps(self):
         ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
-        wire=(ROOT/'overlay'/'apps-dashboard-wire.js').read_text()
-        self.assertIn('let deviceAppSideloadedOnly = true;', ui)
-        self.assertIn('deviceAppSideloadedOnly ? allRows.filter(deviceAppIsSideloaded)', ui)
-        self.assertIn('row.managed || row.origin === "Developer signed (reported)"', ui)
-        self.assertIn('id="sideloader-sideloaded-only"', ui)
-        self.assertIn('deviceAppSideloadedOnly = e.target.checked', wire)
-        self.assertIn('const removed = deviceAppRows.filter', wire)
+        self.assertIn('[...result.values()].filter(deviceAppIsSideloaded)', ui)
+        self.assertIn('row.managed || row.relatedManaged || row.origin === "Developer signed (reported)"', ui)
+        self.assertNotIn('id="sideloader-sideloaded-only"', ui)
+        self.assertNotIn('id="sideloader-device-app-sync"', ui)
+        self.assertIn('Installed apps', ui)
 
-    def test_existing_dashboard_refreshes_filter_on_rebuild(self):
+    def test_existing_dashboard_refreshes_apps_manager_on_rebuild(self):
         with tempfile.TemporaryDirectory() as tmp:
             p=self.setup(tmp)
             first=self.run_patch(tmp)
             self.assertEqual(first.returncode,0,first.stderr+first.stdout)
             index=p/'index.html'
             original=index.read_text()
-            self.assertIn('let deviceAppSideloadedOnly = true;',original)
+            self.assertIn('let appAddOpen = false;',original)
             index.write_text(original.replace(
-                'let deviceAppSideloadedOnly = true;',
-                'let deviceAppSideloadedOnly = false;',1))
+                'let appAddOpen = false;',
+                'let appAddOpen = true;',1))
             second=self.run_patch(tmp)
             self.assertEqual(second.returncode,0,second.stderr+second.stdout)
             migrated=index.read_text()
-            self.assertIn('let deviceAppSideloadedOnly = true;',migrated)
-            self.assertEqual(migrated.count('id="sideloader-sideloaded-only"'),1)
-            self.assertEqual(migrated.count('on("sideloader-sideloaded-only"'),1)
+            self.assertIn('let appAddOpen = false;',migrated)
+            self.assertEqual(migrated.count('id="sideloader-add-app"'),1)
+            self.assertEqual(migrated.count('on("sideloader-add-app"'),1)
             third=self.run_patch(tmp)
             self.assertEqual(third.returncode,0,third.stderr+third.stdout)
             self.assertEqual(migrated,index.read_text())

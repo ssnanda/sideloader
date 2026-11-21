@@ -6,6 +6,9 @@
 #github-discovery{margin:20px 0}
 #github-disconnect{min-height:44px;margin-top:8px}
 #github-scan-result ul{margin:8px 0 0;padding-left:24px}
+.source-actions-row{display:flex;gap:10px;margin:18px 0;flex-wrap:wrap}
+.source-actions-row button{min-height:44px}
+.source-panel[hidden]{display:none!important}
 /* SideLoader mobile navigation and touch-first source cards */
 *{box-sizing:border-box}
 html{scroll-padding-bottom:calc(95px + env(safe-area-inset-bottom));-webkit-text-size-adjust:100%}
@@ -48,17 +51,19 @@ main.sl-confirming > :not(header):not(#sources-action){display:none!important}
 #sources-action .source-cancel{background:transparent;color:CanvasText;border:1px solid #8887}
 #sources-action .source-danger{background:#b72c3b}
 </style>
-</head><body><main><header><h1>Sources</h1></header><section id="sources-action" hidden aria-live="polite"></section><p>Paste an existing AltStore / SideStore Classic JSON source URL. IPA downloads stay at their existing hosted locations. App selection and installation are handled in the Apps tab.</p>
-<form id="add"><input id="url" type="url" placeholder="https://example.com/apps.json" required aria-label="AltStore source URL"><button>Add source</button></form>
-<section id="github-discovery"><div class="heading"><strong>Discover from GitHub</strong></div>
-<p>Paste a GitHub profile. Scan public repositories and accessible private repositories for altstore.json (including nested folders). Existing sources are skipped.</p>
+</head><body><main><header><h1>Sources</h1></header><section id="sources-action" hidden aria-live="polite"></section>
+<div id="status" class="status" role="status">Loading sources…</div><div id="sources"></div>
+<div class="source-actions-row"><button type="button" id="show-add-source">Add source</button><button type="button" id="show-github-scan">Scan GitHub</button></div>
+<section id="add-source-panel" class="source-panel" hidden><div class="heading"><strong>Add source URL</strong></div>
+<form id="add"><input id="url" type="url" placeholder="https://example.com/apps.json" required aria-label="AltStore source URL"><button>Add source</button></form></section>
+<section id="github-discovery" class="source-panel" hidden><div class="heading"><strong>Scan GitHub</strong></div>
 <form id="github-scan"><label for="github-profile">GitHub profile<input id="github-profile" type="text" inputmode="url" placeholder="https://github.com/ssnanda" required></label>
 <label for="github-token">Read-only GitHub token (optional)<input id="github-token" type="password" placeholder="Needed for private repositories" autocomplete="off"></label>
 <button type="submit">Scan and add sources</button></form>
 <div id="github-credential-status" class="status" role="status">Checking GitHub access…</div>
 <div id="github-scan-result" class="status" role="status" style="margin-top:8px">No scan performed yet.</div>
 <button id="github-disconnect" type="button" class="remove" hidden>Forget saved GitHub token</button>
-<small>To scan private repositories, create a fine-grained personal access token with read-only Contents permission. Enter tokens only using localhost or HTTPS. The token remains on this server, never in source URLs.</small></section><div id="status" class="status" role="status">Loading sources…</div><div id="sources"></div><p>Sources manages source lists. Browse and import apps from the <a href="/#apps">Apps tab</a>. Importing an IPA does not mean it is installed on your iPhone.</p></main>
+<small>For private repositories, use a fine-grained token with read-only Contents permission.</small></section></main>
 <nav class="sources-tabs" aria-label="Primary navigation">
   <a href="/#apps">Apps</a>
   <a href="/sources" aria-current="page">Sources</a>
@@ -67,6 +72,9 @@ main.sl-confirming > :not(header):not(#sources-action){display:none!important}
 <script>
 const $=id=>document.getElementById(id);
 let busy=false;
+function togglePanel(id){
+  for(const panel of document.querySelectorAll('.source-panel')) panel.hidden=panel.id!==id || !panel.hidden;
+}
 function node(tag,text,css){const x=document.createElement(tag);if(text!==undefined)x.textContent=text;if(css)x.className=css;return x}
 async function api(path,body){const res=await fetch(path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Requested-With':'sideloop'},credentials:'same-origin',body:body?JSON.stringify(body):undefined});const data=await res.json();if(!res.ok)throw Error(data.error||`HTTP ${res.status}`);return data}
 async function work(label,fn){if(busy)return;busy=true;$('status').textContent=label;document.querySelectorAll('button').forEach(b=>b.disabled=true);try{await fn()}catch(e){$('status').textContent='Error: '+e.message}finally{busy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false)}}
@@ -135,6 +143,8 @@ $('github-scan').addEventListener('submit',e=>{
     if(result.warnings.length)panel.append(node('p',result.warnings.slice(0,8).join(' | ')));
   });
 });
+$('show-add-source').addEventListener('click',()=>togglePanel('add-source-panel'));
+$('show-github-scan').addEventListener('click',()=>togglePanel('github-discovery'));
 $('github-disconnect').addEventListener('click',()=>sourceConfirm(
   'Forget saved GitHub token?',
   'Private sources may become unavailable until another read-only token is added.',

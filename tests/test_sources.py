@@ -19,6 +19,14 @@ mod_spec.loader.exec_module(mod)
 
 
 class SourceTests(unittest.TestCase):
+    def test_sources_page_lists_saved_sources_before_collapsed_add_actions(self):
+        page = (ROOT / 'overlay' / 'sources.html').read_text()
+        self.assertLess(page.index('id="sources"'), page.index('id="show-add-source"'))
+        self.assertIn('id="add-source-panel" class="source-panel" hidden', page)
+        self.assertIn('id="github-discovery" class="source-panel" hidden', page)
+        self.assertIn("togglePanel('add-source-panel')", page)
+        self.assertIn("togglePanel('github-discovery')", page)
+
     def test_classic_altstore(self):
         a = {"name": "Test", "bundleIdentifier": "com.example.app", "version": "1.0", "downloadURL": "../../my.ipa"}
         result = mod._latest(a, "https://example.com/feeds/catalog.json")
