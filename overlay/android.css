@@ -1,0 +1,32 @@
+/* SideLoader Android v1 css start */
+.sl-platform {display:inline-flex;gap:2px;padding:2px;margin:0 0 14px;border-radius:9px;background:var(--fill);}
+.sl-platform label {display:flex;align-items:center;gap:6px;padding:6px 16px;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;color:var(--label-2);}
+.sl-platform label.on {background:var(--cell);color:var(--label);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+.sl-platform input {position:absolute;opacity:0;pointer-events:none;}
+.sl-platform label:focus-within {outline:2px solid var(--blue);outline-offset:1px;}
+.sl-android-section {margin-bottom:14px;}
+.sl-android-section .sl-add-heading small {font-size:12px;color:var(--label-2);}
+.sl-android-notice {margin:0 0 12px;padding:9px 12px;border-radius:10px;font-size:13px;overflow-wrap:anywhere;}
+.sl-android-notice.ok {background:color-mix(in srgb,var(--green,#34c759) 14%,transparent);}
+.sl-android-notice.bad {background:color-mix(in srgb,var(--red,#ff3b30) 14%,transparent);}
+.sl-android-state.ok {color:var(--green,#34c759);}
+.sl-android-state.warn {color:var(--orange,#ff9500);}
+.sl-android-pair {padding:8px 13px 12px;border-top:1px solid var(--sep);}
+.sl-android-pair>summary {cursor:pointer;font-size:13px;font-weight:600;padding:4px 0;}
+.sl-android-grid {display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:8px 10px;align-items:end;margin-top:8px;}
+.sl-android-grid label {display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--label-2);min-width:0;}
+.sl-android-grid .fi {text-align:left;color:var(--label);}
+.sl-android-found {display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:9px;font-size:12px;color:var(--label-2);}
+.sl-android-help {margin-top:9px;font-size:12px;color:var(--label-2);}
+.sl-android-help summary {cursor:pointer;}
+.sl-android-help ol {margin:6px 0 0;padding-left:18px;display:grid;gap:3px;}
+.sl-android-repos {display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:10px 13px;border-top:1px solid var(--sep);}
+.sl-android-repos .fi {flex:1 1 220px;min-width:0;text-align:left;color:var(--label);}
+.sl-android-repo {display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:3px 8px;border-radius:999px;background:var(--fill);}
+.sl-android-repo button {border:0;background:none;color:var(--label-2);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;}
+.sl-android-section .sl-app-entry {gap:10px;}
+@media (max-width:560px){
+  .sl-android-grid {grid-template-columns:1fr;}
+  .sl-android-section .sl-app-entry {flex-wrap:wrap;}
+}
+/* SideLoader Android v1 css end */

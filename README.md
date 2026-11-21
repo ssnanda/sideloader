@@ -1,5 +1,24 @@
 undefined
 
+## Android APK install (Apple/Android switch on Apps)
+
+The top of **Apps** (`/#apps`) has an **Apple / Android** switch, remembered per browser. Apple keeps the existing flow unchanged.
+
+**Android** installs signed `.apk` files with ADB over Wi-Fi. It needs no Apple ID, re-signing or 7-day refresh.
+
+1. **Pair once.** On the phone (Android 11+, same Wi-Fi), open Developer options → **Wireless debugging** → **Pair device with pairing code**. Enter the pairing IP:port and the 6-digit code, then click **Pair**.
+2. **Connect.** Enter the **IP address & port** from the main Wireless debugging screen, then click **Connect**. SideLoader remembers the phone and reconnects quietly on later visits. The connect port changes when Wireless debugging restarts; use **Reconnect** or enter the new port. Phones advertising over mDNS are offered as **Connect** buttons.
+3. **Install.** The **Apps from GitHub releases** list shows `.apk` assets from the newest non-draft release of every repository behind your saved sources, plus repositories added with **Add repo**. The button reads **Install**, **Update**, **Reinstall** or **Installed**, comparing the phone's version code with the APK's. Installs run `adb install -r`, which keeps app data. An APK signed with a different key than the installed copy is refused; uninstall it on the phone first.
+
+Implementation notes:
+
+- The image gains Debian's `adb` package.
+- The adb server runs inside the container on port 5038, so it doesn't clash with a host adb on 5037.
+- The adb key, saved phones, extra repositories and APK metadata live in `build/sideloop/data/android/`. Rebuilds don't require re-pairing.
+- GitHub release listings are cached for 5 minutes. **Refresh** forces a reload.
+- The saved read-only GitHub token, if any, is used for private repositories.
+- The overlay is `overlay/patch-android.py`, `android.py`, `android-ui.js` and `android.css`. Tests are in `tests/test_android.py`.
+
 ## AltServer upstream links and local uninstaller (v0.2.0+15)
 
 SideLoader uses the **maintained [jaakkopalvaila/AltServer-Linux NG branch](https://github.com/jaakkopalvaila/AltServer-Linux/tree/ng)**, not the older NyaMisty fork. The Apps dashboard displays the backend's actual Docker-built commit with **GitHub source** and **Recent commits** links immediately beside the revision, plus the existing **Check for updates** button. The pinned revision remains `5c32531fe0eb6ff87ed8f7b137da803c91945a02` until an upstream upgrade is reviewed and tested. GitHub source updates never change an installed Docker image on their own.
