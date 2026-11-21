@@ -11,6 +11,7 @@ cached APK metadata) so container rebuilds do not require re-pairing.
 import json
 import os
 import re
+import socket
 import struct
 import subprocess
 import threading
@@ -22,7 +23,7 @@ import zipfile
 from . import config, github_sources
 
 ADB = os.environ.get("SIDELOADER_ADB", "adb")
-# Own server port: a developer's host adb (5037) shares Linux host networking.
+# Container-local server port; a host adb on 5037 shares Linux host networking.
 ADB_PORT = os.environ.get("SIDELOADER_ADB_PORT", "5038")
 MAX_APK = 2 * 1024 * 1024 * 1024
 CATALOG_TTL = 300
@@ -31,6 +32,7 @@ _CATALOG = {"at": 0, "key": None, "value": None}
 
 ADDRESS = re.compile(r"^(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9A-Fa-f:]+\]|[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?):\d{1,5}$")
 PAIR_CODE = re.compile(r"^\d{6}$")
+SERIAL = re.compile(r"^[A-Za-z0-9._:\[\]-]{1,200}$")
 PACKAGE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$")
 REPO_URL = re.compile(r"^https://github\.com/([A-Za-z0-9-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$")
 
@@ -59,20 +61,77 @@ def _write(name, value):
 
 
 # ---------------------------------------------------------------- adb
+#
+# Two ways to reach phones:
+#  * External adb server (SIDELOADER_ADB_SERVER=host:port, set to the Mac's
+#    127.0.0.1:5037 in deploy/mac-host.yml). Docker Desktop cannot see Mac USB
+#    devices, but the Mac's own adb server can: USB *and* Wi-Fi phones.
+#  * Container-local server on ADB_PORT: Wi-Fi phones, plus USB on Linux
+#    hosts that pass /dev/bus/usb into the container.
+# The external server is used whenever it answers; otherwise the local one.
 
-def _env():
+def _env(port):
     home = _dir() / "home"
     home.mkdir(exist_ok=True)
     # adb keeps its RSA identity in $HOME/.android; the phone trusts that key.
     return {**os.environ, "HOME": str(home), "ANDROID_USER_HOME": str(home / ".android"),
-            "ANDROID_ADB_SERVER_PORT": ADB_PORT}
+            "ANDROID_ADB_SERVER_PORT": str(port)}
 
 
-def adb(*args, timeout=30):
+def _external():
+    value = os.environ.get("SIDELOADER_ADB_SERVER", "").strip()
+    if not value:
+        return None
+    host, _, port = value.rpartition(":")
+    if not host or not port.isdigit():
+        return None
+    return host.strip("[]"), int(port)
+
+
+def _reachable(host, port):
     try:
-        r = subprocess.run([ADB, *args], capture_output=True, text=True, timeout=timeout, env=_env())
+        with socket.create_connection((host, port), timeout=0.6):
+            return True
+    except OSError:
+        return False
+
+
+def server():
+    ext = _external()
+    if ext and _reachable(*ext):
+        return {"mode": "external", "host": ext[0], "port": ext[1], "usb": True}
+    return {"mode": "local", "host": "127.0.0.1", "port": int(ADB_PORT),
+            "usb": False, "external": f"{ext[0]}:{ext[1]}" if ext else ""}
+
+
+def _run(argv, port, timeout):
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                              stdin=subprocess.DEVNULL, env=_env(port))
     except FileNotFoundError as exc:
         raise RuntimeError("adb is not installed in this image; rebuild with ./bin/build-docker.sh") from exc
+
+
+def _start_local(port):
+    # The first adb command forks the server daemon, which inherits and holds
+    # the client's stdout/stderr open; capture_output then waits forever
+    # ("adb devices timed out"). Start it with no pipes attached instead.
+    try:
+        subprocess.run([ADB, "start-server"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=30, env=_env(port), start_new_session=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError("adb is not installed in this image; rebuild with ./bin/build-docker.sh") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("adb server did not start") from exc
+
+
+def adb(*args, timeout=30, srv=None):
+    srv = srv or server()
+    if srv["mode"] == "local" and not _reachable("127.0.0.1", srv["port"]):
+        _start_local(srv["port"])
+    argv = [ADB, "-H", srv["host"], "-P", str(srv["port"]), *args]
+    try:
+        r = _run(argv, srv["port"], timeout)
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"adb {args[0]} timed out") from exc
     return r.returncode, (r.stdout + r.stderr).strip()
@@ -82,6 +141,13 @@ def _address(value, label):
     value = str(value or "").strip()
     if not ADDRESS.fullmatch(value) or not 0 < int(value.rsplit(":", 1)[1]) < 65536:
         raise ValueError(f"enter the {label} as IP:port, as shown under Wireless debugging")
+    return value
+
+
+def _serial(value):
+    value = str(value or "").strip()
+    if not SERIAL.fullmatch(value) or value.startswith("-"):
+        raise ValueError("select an Android phone")
     return value
 
 
@@ -95,9 +161,11 @@ def parse_devices(output):
         if len(parts) < 2:
             continue
         info = dict(p.split(":", 1) for p in parts[2:] if ":" in p)
+        wifi = ADDRESS.fullmatch(parts[0]) is not None or "._adb-tls-connect." in parts[0]
         devices.append({"serial": parts[0], "state": parts[1],
                         "model": info.get("model", "").replace("_", " "),
-                        "product": info.get("product", "")})
+                        "product": info.get("product", ""),
+                        "transport": "usb" if "usb" in info or not wifi else "wifi"})
     return devices
 
 
@@ -125,31 +193,41 @@ def _saved():
     return [d for d in saved if isinstance(d, dict) and ADDRESS.fullmatch(str(d.get("address", "")))]
 
 
+def _live(srv):
+    code, out = adb("devices", "-l", timeout=15, srv=srv)
+    if code != 0:
+        raise RuntimeError(out or "adb is not responding")
+    return {d["serial"]: d for d in parse_devices(out)}
+
+
 def state(data=None):
     with _LOCK:
+        srv = server()
         saved = _saved()
-        code, out = adb("devices", "-l", timeout=15)
-        if code != 0:
-            raise RuntimeError(out or "adb is not responding")
-        live = {d["serial"]: d for d in parse_devices(out)}
-        # Reconnect remembered phones quietly; the connect port survives until
-        # Wireless debugging is toggled or the phone reboots.
-        for d in saved:
-            if d["address"] not in live:
-                adb("connect", d["address"], timeout=6)
-        if any(d["address"] not in live for d in saved):
-            live = {d["serial"]: d for d in parse_devices(adb("devices", "-l", timeout=15)[1])}
-        _, mdns = adb("mdns", "services", timeout=6)
+        live = _live(srv)
+        # Reconnect remembered Wi-Fi phones quietly; the connect port survives
+        # until Wireless debugging is toggled or the phone reboots.
+        missing = [d for d in saved if d["address"] not in live]
+        for d in missing:
+            adb("connect", d["address"], timeout=6, srv=srv)
+        if missing:
+            live = _live(srv)
+        _, mdns = adb("mdns", "services", timeout=6, srv=srv)
     devices = []
     for d in saved:
         row = live.pop(d["address"], None)
         devices.append({"address": d["address"], "name": d.get("name") or (row or {}).get("model") or d["address"],
-                        "state": row["state"] if row else "offline", "saved": True})
+                        "state": row["state"] if row else "offline", "transport": "wifi", "saved": True})
     for serial, row in live.items():
-        if ":" in serial or "adb-" in serial:  # network transports only
-            devices.append({"address": serial, "name": row["model"] or serial, "state": row["state"], "saved": False})
+        devices.append({"address": serial, "name": row["model"] or serial, "state": row["state"],
+                        "transport": row["transport"], "saved": False})
     known = {d["address"] for d in devices}
-    return {"devices": devices, "discovered": [m for m in parse_mdns(mdns) if m["address"] not in known]}
+    view = {k: srv[k] for k in ("mode", "usb")}
+    if srv["mode"] == "local" and srv.get("external"):
+        view["hint"] = (f"USB phones need the computer's adb server at {srv['external']}; "
+                        "it is not running. On the Mac run: adb start-server")
+    return {"server": view, "devices": devices,
+            "discovered": [m for m in parse_mdns(mdns) if m["address"] not in known]}
 
 
 def pair(data):
@@ -167,18 +245,18 @@ def pair(data):
 def connect(data):
     address = _address(data.get("address"), "IP address & port")
     with _LOCK:
-        rc, out = adb("connect", address, timeout=20)
+        srv = server()
+        rc, out = adb("connect", address, timeout=20, srv=srv)
         if rc != 0 or not re.search(r"\b(connected|already connected) to\b", out):
             raise RuntimeError("Connect failed: " + (out[-300:] or "no response") +
                                ". Pair first, and use the port on the main Wireless debugging screen.")
         time.sleep(0.5)
-        rows = {d["serial"]: d for d in parse_devices(adb("devices", "-l", timeout=15)[1])}
-        row = rows.get(address)
+        row = _live(srv).get(address)
         if row and row["state"] == "unauthorized":
             raise RuntimeError("Phone is connected but not authorized; pair it first")
         model = (row or {}).get("model") or ""
         if not model:
-            rc, out = adb("-s", address, "shell", "getprop", "ro.product.model", timeout=10)
+            rc, out = adb("-s", address, "shell", "getprop", "ro.product.model", timeout=10, srv=srv)
             model = (out.splitlines() or [""])[0].strip() if rc == 0 else ""
         model = model or address
         saved = [d for d in _saved() if d["address"] != address]
@@ -198,23 +276,27 @@ def disconnect(data):
     return {"ok": True}
 
 
-def _device(data):
-    address = _address(data.get("device"), "device address")
-    rows = {d["serial"]: d for d in parse_devices(adb("devices", "-l", timeout=15)[1])}
-    if rows.get(address, {}).get("state") != "device":
-        adb("connect", address, timeout=10)
-        rows = {d["serial"]: d for d in parse_devices(adb("devices", "-l", timeout=15)[1])}
-    if rows.get(address, {}).get("state") != "device":
-        raise RuntimeError("Android phone is not connected; check Wireless debugging is on")
-    return address
+def _device(data, srv):
+    serial = _serial(data.get("device"))
+    rows = _live(srv)
+    if rows.get(serial, {}).get("state") != "device" and ADDRESS.fullmatch(serial):
+        adb("connect", serial, timeout=10, srv=srv)
+        rows = _live(srv)
+    st = rows.get(serial, {}).get("state")
+    if st == "unauthorized":
+        raise RuntimeError("Unlock the phone and accept the 'Allow USB debugging?' prompt, then Refresh")
+    if st != "device":
+        raise RuntimeError("Android phone is not connected; check the cable or Wireless debugging")
+    return serial
 
 
 def installed(data):
     with _LOCK:
-        address = _device(data)
-        rc, out = adb("-s", address, "shell", "pm", "list", "packages", "-3", "--show-versioncode", timeout=30)
+        srv = server()
+        serial = _device(data, srv)
+        rc, out = adb("-s", serial, "shell", "pm", "list", "packages", "-3", "--show-versioncode", timeout=30, srv=srv)
         if rc != 0 or "Unknown option" in out:
-            rc, out = adb("-s", address, "shell", "pm", "list", "packages", "-3", timeout=30)
+            rc, out = adb("-s", serial, "shell", "pm", "list", "packages", "-3", timeout=30, srv=srv)
     if rc != 0:
         raise RuntimeError(out[-300:] or "cannot list Android apps")
     return {"packages": parse_packages(out)}
@@ -420,7 +502,8 @@ def install(data, source_urls):
             app = next((a for a in catalog(source_urls, force=True)["apps"] if a["id"] == asset_id), None)
         if not app:
             raise ValueError("APK not found in current GitHub releases")
-        address = _device(data)
+        srv = server()
+        address = _device(data, srv)
         incoming = _dir() / ".download.apk"
         try:
             with _open(app["url"]) as remote:
@@ -435,7 +518,7 @@ def install(data, source_urls):
                             raise ValueError("APK is over the 2 GiB limit")
                         out.write(chunk)
             info = inspect_apk(incoming)
-            rc, out = adb("-s", address, "install", "-r", str(incoming), timeout=900)
+            rc, out = adb("-s", address, "install", "-r", str(incoming), timeout=900, srv=srv)
         finally:
             incoming.unlink(missing_ok=True)
         meta = _read("apk-meta.json", {})

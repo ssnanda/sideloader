@@ -40,9 +40,54 @@ log "One AltServer invocation reserved; no further attempts will launch without 
 replace('python3 -m sideloop.retry_guard failed "$out" "$rc" || true',
         'python3 -m sideloop.retry_guard failed "$out" "$rc" "$attempt_token" || true',
         "error must refer to reserved invocation")
-replace('  log "OK $msg"; record ok "$msg"',
-        '  log "OK $msg"; record ok "$msg"\n'
-        '  python3 -m sideloop.retry_guard success "$attempt_token"',
-        "release only after verified installation")
+SUCCESS = '  python3 -m sideloop.retry_guard success "$attempt_token"\n'
+if SUCCESS not in source:
+    # Detect by its own line: patch-apple-verification.py inserts after the
+    # same anchor, so "anchor + this line" is never adjacent on later builds.
+    replace('  log "OK $msg"; record ok "$msg"\n',
+            '  log "OK $msg"; record ok "$msg"\n' + SUCCESS,
+            "release only after verified installation")
+
+# Repair persistent checkouts where repeat builds stacked these insertions.
+# A second `retry_guard success` raises after the first released the
+# reservation, turning a verified install into a failed job (and pausing
+# signing). Rebuild each region in its canonical single-copy form.
+import re
+OK = '  log "OK $msg"; record ok "$msg"\n'
+VERIFIED = ('  # Only a verified installation proves the account worked with AltServer.\n'
+            '  python3 -m sideloop.account verified || log "WARNING: could not persist account verification status"\n')
+stacked = re.compile(re.escape(OK) + '(?:' + re.escape(SUCCESS) + '|' +
+                     '|'.join(re.escape(line + '\n') for line in VERIFIED.splitlines()) + ')+')
+matches = stacked.findall(source)
+if len(matches) != 1:
+    sys.exit(f"Single-attempt patch success block: expected 1, got {len(matches)}")
+source = source.replace(matches[0], OK + SUCCESS + (VERIFIED if VERIFIED in matches[0] else ''), 1)
+
+STAGES = '''log "STAGE 1/4: Checking signing safety lock. No Apple request has been sent."
+if ! python3 -m sideloop.retry_guard check; then
+  log "STOPPED: a previous signing attempt failed; review Activity and explicitly resume before retrying."
+  record blocked "signing paused after a failed attempt"
+  exit 73
+fi
+log "STAGE 2/4: iPhone reachable and IPA ready. Preparing Apple developer signing."
+log "STAGE 3/4: Asking AltServer to sign and install. One 2FA code may be required."
+'''
+first = source.find(STAGES)
+if first >= 0:
+    head, tail = source[:first + len(STAGES)], source[first + len(STAGES):]
+    source = head + tail.replace(STAGES, '')
+
+FAILED_COMMENT = ('# Pause all further signing attempts on the first failed attempt.\n'
+                  '# Keep only classified error and action; never save raw auth output.\n')
+TOKENED = 'python3 -m sideloop.retry_guard failed "$out" "$rc" "$attempt_token" || true\n'
+UNTOKENED = 'python3 -m sideloop.retry_guard failed "$out" "$rc" || true\n'
+if TOKENED in source:
+    source = source.replace(FAILED_COMMENT + UNTOKENED, '').replace(UNTOKENED, '')
+
+if source.count(SUCCESS) != 1:
+    sys.exit(f"Single-attempt patch: success call appears {source.count(SUCCESS)} times; refusing to write")
+for line, label in ((TOKENED, 'failure'), ('python3 -m sideloop.retry_guard check', 'safety check')):
+    if source.count(line) > 1:
+        sys.exit(f"Single-attempt patch: {label} call appears {source.count(line)} times; refusing to write")
 shell.write_text(source)
 print("Single AltServer attempt reserved before launch; interrupted attempts stay blocked.")

@@ -6,7 +6,8 @@ try { if (localStorage.getItem("sideloaderPlatform") === "android") slPlatform =
 let slPlatformInner = false;
 let androidState = null, androidCatalog = null, androidPackages = null, androidPackagesFor = null;
 let androidDevice = null, androidBusy = "", androidNotice = null, androidLoading = false;
-let androidPairOpen = null; // null: open only while no phone is saved
+let androidPairOpen = null; // Wi-Fi panel; closed until opened
+const androidOpen = {usb:null}; // USB help: open while no phone is connected
 
 function slPlatformView() {
   const pick = (value, label) => `<label class="${slPlatform === value ? "on" : ""}">
@@ -78,20 +79,29 @@ function androidView() {
   const mb = n => n ? `${(n / 1e6).toFixed(n < 1e7 ? 1 : 0)} MB` : "";
   const notice = androidNotice ? `<div class="sl-android-notice ${androidNotice.bad ? "bad" : "ok"}">${esc(androidNotice.text)}</div>` : "";
   const deviceRows = devices.map(d => {
-    const on = d.state === "device";
+    const on = d.state === "device", usb = d.transport === "usb";
     return `<div class="sl-app-entry">
       ${on ? `<span class="sl-app-select"><input type="radio" name="android-device" data-android-device="${esc(d.address)}" ${d.address === androidDevice ? "checked" : ""} aria-label="Use ${esc(d.name)}"></span>` : ""}
       <span class="sl-app-detail"><b>${esc(d.name)}</b>
-        <small>${esc(d.address)} · <span class="sl-android-state ${on ? "ok" : d.state === "unauthorized" ? "warn" : ""}">${on ? "Connected" : d.state === "unauthorized" ? "Not authorized — pair again" : "Offline"}</span></small></span>
-      ${on ? `<button type="button" class="cap" data-android-disconnect="${esc(d.address)}" ${busy ? "disabled" : ""}>Disconnect</button>`
+        <small>${usb ? "USB" : "Wi-Fi"} · ${esc(d.address)} · <span class="sl-android-state ${on ? "ok" : d.state === "unauthorized" ? "warn" : ""}">${on ? "Connected" : d.state === "unauthorized" ? (usb ? "Accept “Allow USB debugging?” on the phone" : "Not authorized — pair again") : "Offline"}</span></small></span>
+      ${usb ? "" : on ? `<button type="button" class="cap" data-android-disconnect="${esc(d.address)}" ${busy ? "disabled" : ""}>Disconnect</button>`
            : `<button type="button" class="cap" data-android-connect="${esc(d.address)}" ${busy ? "disabled" : ""}>Reconnect</button>`}
       ${d.saved ? `<button type="button" class="cap" data-android-forget="${esc(d.address)}" ${busy ? "disabled" : ""} aria-label="Forget ${esc(d.name)}">Forget</button>` : ""}
     </div>`;
   }).join("");
   const discovered = (androidState?.discovered || []).map(m =>
     `<button type="button" class="cap" data-android-connect="${esc(m.address)}" ${busy ? "disabled" : ""}>Connect ${esc(m.address)}</button>`).join("");
-  const pairForm = `<details class="sl-android-pair" id="android-pair-panel" ${(androidPairOpen ?? !devices.length) ? "open" : ""}>
-    <summary>Pair a phone</summary>
+  const srv = androidState?.server || {};
+  const serverLine = !androidState ? "" : `<div class="sl-android-server">ADB: ${srv.mode === "external" ? "computer's adb server · USB + Wi-Fi" : srv.usb === false && srv.hint ? "container · Wi-Fi only" : "container · Wi-Fi (USB on Linux hosts)"}${srv.hint ? `<br><span class="warn">${esc(srv.hint)}</span>` : ""}</div>`;
+  const usbHelp = `<details class="sl-android-pair" id="android-usb-panel" ${(androidOpen.usb ?? !devices.length) ? "open" : ""}>
+    <summary>Option 1 · USB cable</summary>
+    <ol class="sl-android-steps"><li>Settings → About phone → tap <b>Build number</b> 7 times to enable Developer options.</li>
+      <li>Settings → System → Developer options → turn on <b>USB debugging</b>.</li>
+      <li>Plug in with a data cable (not charge-only); if asked, choose <b>File transfer</b>.</li>
+      <li>Unlock the phone and tap <b>Allow</b> on “Allow USB debugging?” (tick “Always allow”), then <b>Refresh</b>.</li></ol>
+  </details>`;
+  const pairForm = `<details class="sl-android-pair" id="android-pair-panel" ${(androidPairOpen ?? false) ? "open" : ""}>
+    <summary>Option 2 · Wi-Fi (Wireless debugging)</summary>
     <div class="sl-android-grid">
       <label>Pairing IP:port<input class="fi" id="android-pair-address" placeholder="192.168.1.20:37123" inputmode="url" autocomplete="off"></label>
       <label>Pairing code<input class="fi" id="android-pair-code" placeholder="123456" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label>
@@ -128,7 +138,9 @@ function androidView() {
   return `${notice}
   <section class="sl-add-category sl-android-section">
     <div class="sl-add-heading"><b>Android phone</b><button type="button" class="cap" id="android-refresh" ${busy ? "disabled" : ""}>${androidLoading ? "Checking…" : "Refresh"}</button></div>
-    ${deviceRows || `<div class="foot">No phone paired yet.</div>`}
+    ${serverLine}
+    ${deviceRows || `<div class="foot">No phone connected.</div>`}
+    ${usbHelp}
     ${pairForm}
   </section>
   <section class="sl-add-category sl-android-section">
@@ -153,6 +165,8 @@ function androidWire() {
   if (slPlatform !== "android") return;
   const panel = document.getElementById("android-pair-panel");
   if (panel) panel.ontoggle = () => { androidPairOpen = panel.open; };
+  const usbPanel = document.getElementById("android-usb-panel");
+  if (usbPanel) usbPanel.ontoggle = () => { androidOpen.usb = usbPanel.open; };
   const button = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   button("android-refresh", () => { androidNotice = null; androidLoad(true); });
   button("android-pair", async () => {

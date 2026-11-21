@@ -120,6 +120,16 @@ compose=( docker compose -f "$UPSTREAM/docker-compose.yml" -f "$OVERRIDE" )
 if [[ "$START" == true && "$(uname -s)" == Darwin ]]; then
   "$ROOT_DIR/bin/lib/macos-relay.sh" install
 fi
+# Android over USB on macOS goes through the Mac's adb server (see
+# deploy/mac-host.yml). Start it if platform-tools is installed; never install.
+if [[ "$START" == true && "$(uname -s)" == Darwin ]]; then
+  if command -v adb >/dev/null 2>&1; then
+    adb start-server >/dev/null 2>&1 && echo 'Mac adb server running (Android USB + Wi-Fi).' \
+      || echo 'Warning: could not start the Mac adb server; Android USB unavailable.' >&2
+  else
+    echo 'Android USB needs adb on the Mac (Android platform-tools); Wi-Fi install still works.'
+  fi
+fi
 printf '\nAll SideLoader source overlays validated.\n'
 printf 'Sideloop upstream base: %s (plus SideLoader overlays %s)\n' "$(git -C "$UPSTREAM" rev-parse --short HEAD)" "$(cat "$ROOT_DIR/VERSION")"
 if [[ "$NO_CACHE" == true ]]; then

@@ -4,16 +4,21 @@ undefined
 
 The top of **Apps** (`/#apps`) has an **Apple / Android** switch, remembered per browser. Apple keeps the existing flow unchanged.
 
-**Android** installs signed `.apk` files with ADB over Wi-Fi. It needs no Apple ID, re-signing or 7-day refresh.
+**Android** installs signed `.apk` files with ADB, over a USB cable or Wi-Fi. It needs no Apple ID, re-signing or 7-day refresh.
 
-1. **Pair once.** On the phone (Android 11+, same Wi-Fi), open Developer options → **Wireless debugging** → **Pair device with pairing code**. Enter the pairing IP:port and the 6-digit code, then click **Pair**.
-2. **Connect.** Enter the **IP address & port** from the main Wireless debugging screen, then click **Connect**. SideLoader remembers the phone and reconnects quietly on later visits. The connect port changes when Wireless debugging restarts; use **Reconnect** or enter the new port. Phones advertising over mDNS are offered as **Connect** buttons.
+1. **USB cable.** Turn on Developer options → **USB debugging**, plug in with a data cable, then accept **Allow USB debugging?** on the phone.
+   - On macOS, Docker Desktop can't see USB devices. The container therefore uses the **Mac's adb server** (`SIDELOADER_ADB_SERVER=127.0.0.1:5037` in `deploy/mac-host.yml`), which `build-docker.sh` starts when Android platform-tools is installed.
+   - If the Mac server isn't running, SideLoader falls back to an adb server inside the container (Wi-Fi only) and shows a hint.
+   - On Linux, the container's own adb server sees USB through `/dev/bus/usb`.
+2. **Wi-Fi (Android 11+, same network).** Open Developer options → **Wireless debugging** → **Pair device with pairing code**. Enter the pairing IP:port and the 6-digit code, then click **Pair**. Then enter the **IP address & port** from the main Wireless debugging screen and click **Connect**.
+   - SideLoader remembers the phone and reconnects on later visits.
+   - The connect port changes when Wireless debugging restarts; use **Reconnect** or enter the new port.
 3. **Install.** The **Apps from GitHub releases** list shows `.apk` assets from the newest non-draft release of every repository behind your saved sources, plus repositories added with **Add repo**. The button reads **Install**, **Update**, **Reinstall** or **Installed**, comparing the phone's version code with the APK's. Installs run `adb install -r`, which keeps app data. An APK signed with a different key than the installed copy is refused; uninstall it on the phone first.
 
 Implementation notes:
 
 - The image gains Debian's `adb` package.
-- The adb server runs inside the container on port 5038, so it doesn't clash with a host adb on 5037.
+- The container's fallback adb server uses port 5038, so it never clashes with a host adb on 5037.
 - The adb key, saved phones, extra repositories and APK metadata live in `build/sideloop/data/android/`. Rebuilds don't require re-pairing.
 - GitHub release listings are cached for 5 minutes. **Refresh** forces a reload.
 - The saved read-only GitHub token, if any, is used for private repositories.

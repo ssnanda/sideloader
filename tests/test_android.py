@@ -83,6 +83,43 @@ class AdbOutputTests(unittest.TestCase):
         self.assertEqual(rows[0]['model'], 'Pixel 7')
         self.assertEqual([r['state'] for r in rows], ['device', 'unauthorized'])
 
+    def test_usb_and_wifi_transports(self):
+        out = ('List of devices attached\n'
+               'R5CT1234ABC  device usb:1-1 product:a54 model:SM_A546E device:a54x transport_id:1\n'
+               'R5CT9999XYZ  unauthorized usb:1-2 transport_id:2\n'
+               '192.168.1.20:41234 device product:p model:Pixel_7 device:p transport_id:3\n'
+               'adb-1A2B._adb-tls-connect._tcp device product:p model:Pixel_7 transport_id:4\n')
+        self.assertEqual([r['transport'] for r in android.parse_devices(out)], ['usb', 'usb', 'wifi', 'wifi'])
+
+    def test_external_server_preferred_then_local_fallback(self):
+        with patch.dict(android.os.environ, {'SIDELOADER_ADB_SERVER': '127.0.0.1:5037'}):
+            with patch.object(android, '_reachable', return_value=True):
+                self.assertEqual(android.server()['mode'], 'external')
+            with patch.object(android, '_reachable', return_value=False):
+                srv = android.server()
+                self.assertEqual((srv['mode'], srv['port'], srv['external']), ('local', 5038, '127.0.0.1:5037'))
+        with patch.dict(android.os.environ, {'SIDELOADER_ADB_SERVER': ''}):
+            self.assertEqual(android.server()['mode'], 'local')
+
+    def test_local_server_started_without_pipes(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as d, \
+                patch.object(android, '_reachable', return_value=False), \
+                patch.object(android.subprocess, 'run', side_effect=lambda argv, **kw: calls.append((argv, kw)) or
+                             types.SimpleNamespace(returncode=0, stdout='List of devices attached\n', stderr='')):
+            config.DATA = Path(d)
+            android.adb('devices', srv={'mode': 'local', 'host': '127.0.0.1', 'port': 5038})
+        start, run = calls
+        self.assertEqual(start[0][1:], ['start-server'])
+        self.assertIs(start[1]['stdout'], android.subprocess.DEVNULL)
+        self.assertEqual(run[0][1:5], ['-H', '127.0.0.1', '-P', '5038'])
+
+    def test_serial_validation(self):
+        self.assertEqual(android._serial('R5CT1234ABC'), 'R5CT1234ABC')
+        for bad in ('', '-s', 'a b', 'x;rm'):
+            with self.assertRaises(ValueError):
+                android._serial(bad)
+
     def test_mdns_and_packages(self):
         mdns = ('List of discovered mdns services\n'
                 'adb-1A2B\t_adb-tls-connect._tcp\t192.168.1.20:41234\n'

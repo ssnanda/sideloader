@@ -61,7 +61,10 @@ replace(watcher,
     "disable unverified automatic sign-in")
 
 shell = root / "scripts" / "refresh.sh"
-replace(shell,
+# patch-one-attempt.py later inserts its success line right after the same
+# anchor, so detect this insertion by its own line, not by adjacency.
+if 'python3 -m sideloop.account verified' not in shell.read_text():
+  replace(shell,
     'log "OK $msg"; record ok "$msg"',
     '''log "OK $msg"; record ok "$msg"
   # Only a verified installation proves the account worked with AltServer.

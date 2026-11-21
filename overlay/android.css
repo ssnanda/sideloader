@@ -29,4 +29,7 @@
   .sl-android-grid {grid-template-columns:1fr;}
   .sl-android-section .sl-app-entry {flex-wrap:wrap;}
 }
+.sl-android-server {padding:7px 13px;font-size:12px;color:var(--label-2);border-bottom:1px solid var(--sep);}
+.sl-android-server .warn {color:var(--orange,#ff9500);}
+.sl-android-steps {margin:6px 0 2px;padding-left:18px;display:grid;gap:3px;font-size:12px;color:var(--label-2);}
 /* SideLoader Android v1 css end */

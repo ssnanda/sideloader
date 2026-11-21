@@ -16,6 +16,10 @@ services:
       # X-Mme-Client-Info, which must remain the provider's provisioned value.
       # Custom anisette providers can supply a matching override.
       ALTSERVER_GSA_USER_AGENT: "${SIDELOADER_GSA_USER_AGENT:-akd/1.0 CFNetwork/811.5.4 Darwin/16.7.0}"
+      # Android: Docker Desktop cannot see Mac USB devices, so the container
+      # drives the Mac's own adb server (USB + Wi-Fi phones). Falls back to a
+      # container adb server (Wi-Fi only) while the Mac server is not running.
+      SIDELOADER_ADB_SERVER: "${SIDELOADER_ADB_SERVER:-127.0.0.1:5037}"
       ALLOW_HTTP_SOURCES: "${ALLOW_HTTP_SOURCES:-0}"
       ALLOW_PRIVATE_SOURCE_URLS: "${ALLOW_PRIVATE_SOURCE_URLS:-0}"
     volumes: !override

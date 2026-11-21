@@ -73,7 +73,12 @@ replace(jobs,
         retry_guard.failed("\\n".join(job.lines[-100:]), job.rc)''',
     "PTY error classification")
 shell = root / "scripts" / "refresh.sh"
-replace(shell,
+# Later overlays insert lines inside these blocks (Apple Account log, token
+# argument), so "after in source" stops matching on the next build and the
+# block was re-inserted every time. Detect each block by its own line.
+_shell_text = shell.read_text()
+if 'STAGE 1/4: Checking signing safety lock' not in _shell_text:
+  replace(shell,
     'log "signing and installing $(basename "$IPA_PATH") on $DEVICE_UDID"',
     '''log "STAGE 1/4: Checking signing safety lock. No Apple request has been sent."
 if ! python3 -m sideloop.retry_guard check; then
@@ -90,7 +95,8 @@ replace(shell,
     'log "STAGE 4/4: AltServer exited $rc; checking the installed app and provisioning profile."\n'
     'if (( rc == 0 )) && [[ "$(app_state)" == installed ]] && stamp_success; then',
     "installation verification")
-replace(shell,
+if 'python3 -m sideloop.retry_guard failed "$out"' not in _shell_text:
+  replace(shell,
     'n=$(( $(read_fails) + 1 )); echo "$n" > "$FAILS"',
     '''# Pause all further signing attempts on the first failed attempt.
 # Keep only classified error and action; never save raw auth output.
