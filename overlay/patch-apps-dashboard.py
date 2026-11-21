@@ -149,8 +149,8 @@ if marker not in h:
                 '  ${sideloopCoreCard()}\n  ${altserverBackendCard()}',
                 '  ${sideLoaderVersionStrip()}', 'replace full build provenance cards')
     h = replace(h, 'function settingsView() {',
-                (overlays / 'apps-dashboard-ui.js').read_text() + '\n' +
-                (overlays / 'screen-flow-ui.js').read_text() +
+                ((overlays / 'apps-dashboard-ui.js').read_text() + '\n' +
+                 (overlays / 'screen-flow-ui.js').read_text()).rstrip('\n') +
                 '\nfunction settingsView() {', 'apps manager helper')
     h = replace(h,
                 '  on("reload", "onclick", loadLogs);',
@@ -229,8 +229,7 @@ elif new_start not in h:
 # Boot can occur after a Sources installation has already finished, so the
 # completed job must still be watched to show its result.
 old_boot = '  await refresh();\n  if (!S.configured) view = "apps";'
-new_boot = '''  await refresh();
-  let pendingSourceJob = null;
+handoff_boot = '''  let pendingSourceJob = null;
   try {
     pendingSourceJob = sessionStorage.getItem("sideloaderPendingJob");
     sessionStorage.removeItem("sideloaderPendingJob");
@@ -241,9 +240,15 @@ new_boot = '''  await refresh();
     view = "apps";
   }
   if (!S.configured) view = "apps";'''
+new_boot = '  await refresh();\n' + handoff_boot
+screen_flow_boot = (
+    '  await refresh();\n'
+    '  if (S.job?.running && S.job.kind === "refresh" && !slFlow) slFlow = {mode:"job",jobId:S.job.id,title:S.job.title};\n'
+    + handoff_boot
+)
 if old_boot in h:
     h = h.replace(old_boot, new_boot, 1)
-elif new_boot not in h:
+elif new_boot not in h and screen_flow_boot not in h:
     sys.exit('Apps dashboard patch: unrecognized boot method for Sources handoff')
 
 # Load source apps automatically after authentication; keep Sources as a

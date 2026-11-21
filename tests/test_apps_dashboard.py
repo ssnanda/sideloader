@@ -281,6 +281,35 @@ class DashboardPatchTests(unittest.TestCase):
             self.assertEqual(third.returncode,0,third.stderr+third.stdout)
             self.assertEqual(migrated,index.read_text())
 
+    def test_repeat_build_after_screen_flow_patch_preserves_sources_handoff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self.setup(tmp)
+            index = p / 'index.html'
+            # Include the hooks expected by patch-screen-flow.py so both patches
+            # can run in sequence and then repeat, just like bin/build-docker.sh.
+            full_page = PAGE.replace(
+                'function renderAuth(first) {}',
+                'function renderAuth(first) {}\n'
+                'async function poll() {\n    if (S.job && S.job.running) watched.add(S.job.id);\n}\n'
+                'function render() {\n  return view === "apps" ? appsView() : activityView();\n}\n'
+                'function renderSheet() {\n}'
+            ).replace(
+                '</script>',
+                'function upload(f) {}\n</script>'
+            )
+            index.write_text(full_page)
+            screen_patch = [sys.executable, str(ROOT / 'overlay' / 'patch-screen-flow.py'), tmp, str(ROOT / 'overlay')]
+            r1 = self.run_patch(tmp)
+            self.assertEqual(r1.returncode, 0, r1.stderr + r1.stdout)
+            s1 = subprocess.run(screen_patch, capture_output=True, text=True)
+            self.assertEqual(s1.returncode, 0, s1.stderr + s1.stdout)
+            after_first_cycle = index.read_text()
+            r2 = self.run_patch(tmp)
+            self.assertEqual(r2.returncode, 0, r2.stderr + r2.stdout)
+            s2 = subprocess.run(screen_patch, capture_output=True, text=True)
+            self.assertEqual(s2.returncode, 0, s2.stderr + s2.stdout)
+            self.assertEqual(after_first_cycle, index.read_text())
+
     def test_frontend_helper_javascript_syntax(self):
         if subprocess.run(['which','node'],capture_output=True).returncode: self.skipTest('node missing')
         src=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()

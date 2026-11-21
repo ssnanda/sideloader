@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_ANISETTE = 'ANISETTE_SERVER: "${SIDELOADER_ANISETTE_SERVER:-https://mac-ani.jkcoxson.com}"'
+DEFAULT_ANISETTE = 'ANISETTE_SERVER: "${SIDELOADER_ANISETTE_SERVER:-https://new.ani.sidestore.io}"'
 DEFAULT_AGENT = (
     'ALTSERVER_GSA_USER_AGENT: '
     '"${SIDELOADER_GSA_USER_AGENT:-akd/1.0 CFNetwork/811.5.4 Darwin/16.7.0}"'

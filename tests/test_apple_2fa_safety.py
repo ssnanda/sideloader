@@ -129,6 +129,26 @@ class TwoFactorTests(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stderr + second.stdout)
         self.assertEqual(jobs.read_text(), text)
 
+    def test_repeatable_with_view_method_present(self):
+        jobs_file = self.base / 'sideloop' / 'jobs.py'
+        with_view = JOBS + '''
+    def view(self, since=None):
+        with self.lock:
+            return {
+                "needs_input": self.needs_input, "accepts_input": self.fd is not None,
+            }
+'''
+        jobs_file.write_text(with_view)
+        first = subprocess.run(self.cmd, capture_output=True, text=True)
+        self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+        after_first = jobs_file.read_text()
+        self.assertEqual(after_first.count('"verification_seconds_remaining":'), 1)
+        self.assertEqual(after_first.count('"verification_challenge_seen":'), 1)
+        self.assertEqual(after_first.count('"verification_delivery":'), 1)
+        second = subprocess.run(self.cmd, capture_output=True, text=True)
+        self.assertEqual(second.returncode, 0, second.stderr + second.stdout)
+        self.assertEqual(jobs_file.read_text(), after_first)
+
     def test_rejects_unknown_ui_without_partial_write(self):
         pkg=self.base/'sideloop'
         (pkg/'index.html').write_text('unexpected UI')

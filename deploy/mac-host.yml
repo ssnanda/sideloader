@@ -8,10 +8,10 @@ services:
       MUX: external
       USBMUXD_SOCKET_ADDRESS: 127.0.0.1:27015
       UI_PORT: "38080"
-      # October 2026 Apple -80046: the local Android anisette is no longer accepted.
-      ANISETTE_SERVER: "${SIDELOADER_ANISETTE_SERVER:-https://mac-ani.jkcoxson.com}"
+      # Nov 2026 AltServer-Linux NG (ng-2026-11-05): Mac anisette v3 provider.
+      ANISETTE_SERVER: "${SIDELOADER_ANISETTE_SERVER:-https://new.ani.sidestore.io}"
       # AltStore's Oct 2026 fix matches GrandSlam User-Agent to the anisette
-      # identity. mac-ani.jkcoxson.com currently reports this Mac akd UA.
+      # identity. new.ani.sidestore.io (/v3/client_info) reports this Mac akd UA.
       # AltServer-Linux NG honors ALTSERVER_GSA_USER_AGENT; do not override
       # X-Mme-Client-Info, which must remain the provider's provisioned value.
       # Custom anisette providers can supply a matching override.

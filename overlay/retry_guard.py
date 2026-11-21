@@ -105,6 +105,9 @@ def _classify(output, rc):
     if "-80045" in text:
         return ("-80045", "signing_failure", "AltServer reported Apple signing error -80045.",
                 "Check anisette identity and account before resuming.")
+    if "-80043" in text:
+        return ("-80043", "signing_failure", "AltServer reported Apple signing error -80043 (anisette identity rejected).",
+                "Ensure anisette v3 (new.ani.sidestore.io) is configured before resuming.")
     if "verification failed" in text or "invalid verification" in text or "status code: 401" in text:
         return ("verification_failed", "verification", "Apple Account verification was unsuccessful.",
                 "Confirm account access and the 2FA code before explicitly resuming.")

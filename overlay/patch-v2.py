@@ -190,12 +190,13 @@ dockerfile = root / 'Dockerfile'
 # revision changed it to ng-2026-10-20. Both are supported inputs. A failed
 # prior run can also leave this Dockerfile only partially patched; do not
 # overwrite that state or accept an unrecognized signing revision silently.
-revision = '5c32531fe0eb6ff87ed8f7b137da803c91945a02'
+revision = '8ab21362e47e7d24e18f54ad8a39a4400cf97ebe'
 expected = f'ARG ALTSERVER_TAG=ng\nARG ALTSERVER_REV={revision}'
 docker_source = dockerfile.read_text()
 if expected not in docker_source:
     known = ('ARG ALTSERVER_TAG=ng-2026-09-13',
-             'ARG ALTSERVER_TAG=ng-2026-10-20')
+             'ARG ALTSERVER_TAG=ng-2026-10-20',
+             'ARG ALTSERVER_TAG=ng\nARG ALTSERVER_REV=5c32531fe0eb6ff87ed8f7b137da803c91945a02')
     matches = [tag for tag in known if tag in docker_source]
     if len(matches) != 1:
         sys.exit('Cannot safely patch Dockerfile: unknown AltServer revision; '

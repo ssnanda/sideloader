@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 
-EXPECTED_REVISION = "5c32531fe0eb6ff87ed8f7b137da803c91945a02"
+EXPECTED_REVISION = "8ab21362e47e7d24e18f54ad8a39a4400cf97ebe"
 METADATA_PATH = Path("/etc/sideloader/altserver-build.json")
 BINARY_PATH = Path("/usr/local/bin/AltServer")
 

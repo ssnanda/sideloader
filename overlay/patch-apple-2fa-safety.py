@@ -137,12 +137,13 @@ jobs = change(jobs,
     '        self.verification_deadline = None\n'
     '        self.timed_out_2fa = False',
     'verification timeout fields')
-jobs = change(jobs,
-    '            self.lines = self.lines[-1500:]',
-    '            if self.needs_input and self.verification_deadline is None:\n'
-    '                self.verification_deadline = time.monotonic() + 60\n'
-    '            self.lines = self.lines[-1500:]',
-    'start verification deadline')
+if 'self.verification_deadline = time.monotonic() + 60' not in jobs:
+    jobs = change(jobs,
+        '            self.lines = self.lines[-1500:]',
+        '            if self.needs_input and self.verification_deadline is None:\n'
+        '                self.verification_deadline = time.monotonic() + 60\n'
+        '            self.lines = self.lines[-1500:]',
+        'start verification deadline')
 jobs = change(jobs,
     '            self.needs_input = False\n            self.lines.append("Apple verification code submitted [redacted]")',
     '            self.needs_input = False\n            self.verification_deadline = None\n'
@@ -190,6 +191,7 @@ if 'def run_pty(job, argv):' in jobs:
             retry_guard.failed(terminal, job.rc or 1)''',
         'preserve explicit Apple sign-in errors from PTY')
 
+if 'def view(self, since=None):' in jobs and '"verification_seconds_remaining":' not in jobs:
     jobs = change(jobs,
         '                "needs_input": self.needs_input, "accepts_input": self.fd is not None,',
         '                "needs_input": self.needs_input, "accepts_input": self.fd is not None,\n'
@@ -228,14 +230,15 @@ jobs = change(jobs,
     '        self.timed_out_2fa = False\n'
     '        self.verification_challenge_seen = False',
     'record actual verification challenge')
-jobs = change(jobs,
-    '            if self.needs_input and self.verification_deadline is None:\n'
-    '                self.verification_deadline = time.monotonic() + 60',
-    '            if self.needs_input and self.verification_deadline is None:\n'
-    '                self.verification_challenge_seen = True\n'
-    '                self.verification_deadline = time.monotonic() + 60',
-    'mark challenge when PTY asks for input')
-if 'def view(self, since=None):' in jobs:
+if 'self.verification_challenge_seen = True' not in jobs:
+    jobs = change(jobs,
+        '            if self.needs_input and self.verification_deadline is None:\n'
+        '                self.verification_deadline = time.monotonic() + 60',
+        '            if self.needs_input and self.verification_deadline is None:\n'
+        '                self.verification_challenge_seen = True\n'
+        '                self.verification_deadline = time.monotonic() + 60',
+        'mark challenge when PTY asks for input')
+if 'def view(self, since=None):' in jobs and '"verification_challenge_seen": self.verification_challenge_seen,' not in jobs:
     jobs = change(jobs,
         '                "verification_seconds_remaining": max(0, int(self.verification_deadline - time.monotonic() + 0.999)) if self.verification_deadline is not None else None,',
         '                "verification_challenge_seen": self.verification_challenge_seen,\n'
