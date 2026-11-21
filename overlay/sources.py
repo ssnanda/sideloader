@@ -199,8 +199,13 @@ class Sources:
                 inspected = ipa.inspect(incoming)
                 if "error" in inspected:
                     raise ValueError(inspected["error"])
-                if inspected.get("bundle_id") != bundle_id:
-                    raise ValueError("IPA bundle ID differs from source listing; refusing installation")
+                actual = inspected.get("bundle_id") or ""
+                if not actual:
+                    raise ValueError("IPA has no CFBundleIdentifier (broken or empty build); "
+                                     "rebuild the IPA published by this source")
+                if actual != bundle_id:
+                    raise ValueError(f"IPA bundle ID {actual} differs from source listing "
+                                     f"{bundle_id}; refusing installation")
                 app.idle()
                 filename = item["downloadURL"].split("?")[0].rsplit("/", 1)[-1] or "source.ipa"
                 app_id = store.add_app(incoming, inspected, filename)

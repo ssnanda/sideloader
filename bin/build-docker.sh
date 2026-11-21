@@ -11,24 +11,32 @@ START=true
 OPEN=false
 LOGS=false
 NO_CACHE=false
+BUMP=true
+BUMP_ARGS=()
 
 usage() {
   cat <<'USAGE'
 Build SideLoader's Docker server locally on macOS or Ubuntu.
 
-Usage: ./bin/build-docker.sh [--no-start] [--open] [--logs] [--no-cache] [--help]
+Usage: ./bin/build-docker.sh [--no-start] [--open] [--logs] [--no-cache]
+                              [--skip-bump] [--no-push] [--help]
 
-  (no args)    Clone upstream into build/ if missing, apply the source overlay,
-               validate Docker networking, build and start the server.
+  (no args)    If the checkout has uncommitted changes, run bin/bump-version.sh
+               first (interactive), then clone upstream into build/ if missing,
+               apply the source overlay, validate Docker networking, build and
+               start the server.
   --no-start   Build the Docker image but don't start or restart containers.
   --open       Open the local dashboard in the default browser after starting.
   --logs       Follow container logs after starting; Ctrl-C stops log viewing.
   --no-cache   Force Docker to rebuild all image layers rather than reuse cache.
+  --skip-bump  Build pending changes without running bump-version.sh.
+  --no-push    Pass --no-push to bump-version.sh (commit locally only).
   --help       Show this help.
 
 The upstream checkout and all persistent data stay in ignored build/.
 The upstream is never upgraded automatically on subsequent builds.
-This script is local-only: it never pushes to GitHub or runs GitHub Actions.
+Builds run locally only. The automatic bump-version.sh step commits and (unless
+--no-push) pushes pending changes after its own confirmation prompt.
 USAGE
 }
 while [[ $# -gt 0 ]]; do
@@ -37,6 +45,8 @@ while [[ $# -gt 0 ]]; do
     --open) OPEN=true ;;
     --logs) LOGS=true ;;
     --no-cache) NO_CACHE=true ;;
+    --skip-bump) BUMP=false ;;
+    --no-push) BUMP_ARGS+=(--no-push) ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
   esac
@@ -49,6 +59,14 @@ need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing required tool: $1" >
 for tool in git docker python3; do need "$tool"; done
 docker compose version >/dev/null 2>&1 || { echo 'Docker Compose v2 is required.' >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo 'Start Docker Desktop or Docker Engine first.' >&2; exit 1; }
+
+# Pending edits: version/commit them first so the image reports the right
+# VERSION. bump-version.sh prompts before changing anything; cancelling there
+# continues the build with the uncommitted changes.
+if [[ "$BUMP" == true && -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+  echo 'Uncommitted changes detected; running bump-version.sh before building.'
+  "$ROOT_DIR/bin/bump-version.sh" ${BUMP_ARGS[@]+"${BUMP_ARGS[@]}"}
+fi
 
 case "$(uname -s)" in
   Darwin)
@@ -119,7 +137,7 @@ else
 fi
 printf '\nSideLoader version: %s\n' "$(cat "$ROOT_DIR/VERSION")"
 printf 'Local build: %s\n' "$UPSTREAM"
-printf 'GitHub: unchanged (no push or GitHub Actions).\n'
+printf 'GitHub Actions: not used (local build).\n'
 if [[ "$START" == true ]]; then
   printf 'Dashboard: http://localhost:38080\n'
   printf 'iPhone on same Wi-Fi: http://<server-LAN-IP>:38080\n'
