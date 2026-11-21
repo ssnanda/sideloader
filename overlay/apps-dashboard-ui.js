@@ -2,7 +2,7 @@
 let deviceAppTarget = null;
 let deviceAppRows = [], deviceAppSelected = new Set(), deviceAppScannedFor = null;
 let deviceAppBusy = false, deviceAppError = "";
-let appAddOpen = false;
+let appAddOpen = location.hash === "#apps-add";
 let sourceCatalog = [], sourceCatalogError = "", sourceCatalogBusy = false;
 let sourceCatalogLoaded = false;
 
@@ -23,7 +23,7 @@ async function loadSourceCatalog() {
   }
 }
 
-async function importSourceApp(item) {
+async function importSourceApp(item, installed=false) {
   if (sourceCatalogBusy) return;
   sourceCatalogBusy = true;
   render();
@@ -35,7 +35,7 @@ async function importSourceApp(item) {
     await refresh();
     const imported = (S.apps || []).find(app => app.id === r.app_id);
     const chosen = (S.registered || []).find(d => d.udid === deviceAppTarget) || (S.registered || [])[0];
-    if (imported && chosen) singleAppSigning(imported, chosen.udid, false);
+    if (imported && chosen) singleAppSigning(imported, chosen.udid, installed);
     else slMessage("IPA imported", item.name + " is now available under Imported IPAs.");
   } catch (e) {
     slMessage("IPA import failed", e.message);
@@ -128,11 +128,12 @@ function deviceAppsManager() {
   if (scanned) for (const row of deviceAppRows) {
     const managed = (S.apps || []).find(app => deviceBundleMatches(row.bundle_id, app.bundle_id));
     const relatedManaged = managed ? null : relatedSavedApp(row, S.apps || []);
+    const sourceMatch = sourceCatalog.find(app => deviceBundleMatches(row.bundle_id, app.bundleIdentifier));
     const target = managed?.targets?.find(t => t.udid === udid);
     // A user-app inventory entry alone does not establish that a SideLoader
     // signing/install completed. The device/profile check must agree too.
     const confirmed = Boolean(managed && target?.installation?.state === "installed");
-    result.set(row.bundle_id, {...row, managed, relatedManaged, installed: managed ? confirmed : Boolean(row.installed),
+    result.set(row.bundle_id, {...row, managed, relatedManaged, sourceMatch, installed: managed ? confirmed : Boolean(row.installed),
       scanReported: Boolean(row.installed), confirmed});
   }
   const rows = [...result.values()].filter(deviceAppIsSideloaded).sort((a,b)=>a.name.localeCompare(b.name));
@@ -180,14 +181,14 @@ function deviceAppsManager() {
     <div class="sl-installed-title"><b>Installed apps</b>${scanned?`<span>${rows.length}</span>`:""}</div>
     ${!scanned?'<div class="sl-empty-installed">Scan this iPhone to show installed apps and signing time remaining.</div>':""}
     <div class="list sl-app-list">${rows.map(row=>{
-      const button = row.managed ? (row.confirmed?"Re-sign":"Install") : "Remove";
+      const button = row.managed || row.sourceMatch ? "Re-sign" : "Remove";
       const disabled = busy || (!row.managed && !row.relatedManaged && !scanned);
       const target = row.managed?.targets?.find(t => t.udid === udid);
       const deviceSigning = signingDaysLeft(target, row.signing_expiry);
       const subtitle = row.relatedManaged ? `Saved IPA uses different bundle ID ${row.relatedManaged.bundle_id}` : row.bundle_id;
       return `<div class="sl-app-entry" data-bundle="${esc(row.bundle_id)}">
-        <span class="sl-app-detail"><b>${esc(row.name)}</b><strong class="sl-signing-days">${esc(deviceSigning)}</strong><small>${esc(subtitle)}${row.version?" · "+esc(row.version):""}</small></span>
-        <button type="button" class="cap ${row.installed?"":"solid"}" data-device-app-action="${esc(row.managed?.bundle_id || row.bundle_id)}" ${disabled?"disabled":""}>${button}</button>
+        <span class="sl-app-detail"><span class="sl-installed-main"><b>${esc(row.name)}</b><strong class="sl-signing-days">${esc(deviceSigning)}</strong></span><small>${esc(subtitle)}${row.version?" · "+esc(row.version):""}</small></span>
+        <button type="button" class="cap ${row.installed?"":"solid"}" ${row.sourceMatch&&!row.managed?`data-device-source-action="${esc(row.sourceMatch.bundleIdentifier)}"`:`data-device-app-action="${esc(row.managed?.bundle_id || row.bundle_id)}"`} ${disabled?"disabled":""}>${button}</button>
       </div>`;
     }).join("")}</div>
     ${blocked?`<div class="foot" style="color:var(--red)">Apple signing is paused. Scanning and removal still work; use Install to see why signing is blocked.</div>`:""}

@@ -26,6 +26,12 @@ class SourceTests(unittest.TestCase):
         self.assertIn('id="github-discovery" class="source-panel" hidden', page)
         self.assertIn("togglePanel('add-source-panel')", page)
         self.assertIn("togglePanel('github-discovery')", page)
+        self.assertIn("view.href='/#apps-add'", page)
+
+    def test_imported_ipa_storage_is_not_limited_to_three(self):
+        source = (ROOT / 'overlay' / 'sources.py').read_text()
+        self.assertNotIn('three-app limit reached', source)
+        self.assertNotIn('len(current_ids) >= 3', source)
 
     def test_classic_altstore(self):
         a = {"name": "Test", "bundleIdentifier": "com.example.app", "version": "1.0", "downloadURL": "../../my.ipa"}

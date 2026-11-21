@@ -237,6 +237,14 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertIn('function sideLoaderAppIdSummary()', ui)
         self.assertIn('Apple remaining/pending unavailable', ui)
         self.assertIn('row.signing_expiry', ui)
+        self.assertIn('class="sl-installed-main"', ui)
+
+    def test_installed_app_can_resign_from_exact_matching_source(self):
+        ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
+        wire=(ROOT/'overlay'/'apps-dashboard-wire.js').read_text()
+        self.assertIn('const sourceMatch = sourceCatalog.find', ui)
+        self.assertIn('data-device-source-action', ui)
+        self.assertIn('importSourceApp(selected, true)', wire)
 
     def test_unique_same_name_bundle_change_is_one_installed_row(self):
         ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
@@ -260,6 +268,7 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertIn('on("sideloader-add-app", "onclick"',wire)
         self.assertIn('data-source-app',wire)
         self.assertIn('loadSourceCatalog();',patch)
+        self.assertIn('scanDeviceApps((S.registered || [])[0].udid)',patch)
         self.assertNotIn("installed?'Update':'Install'",sources)
         self.assertNotIn("install_now:true",sources)
 
@@ -296,14 +305,14 @@ class DashboardPatchTests(unittest.TestCase):
             self.assertEqual(first.returncode,0,first.stderr+first.stdout)
             index=p/'index.html'
             original=index.read_text()
-            self.assertIn('let appAddOpen = false;',original)
+            self.assertIn('let appAddOpen = location.hash === "#apps-add";',original)
             index.write_text(original.replace(
-                'let appAddOpen = false;',
+                'let appAddOpen = location.hash === "#apps-add";',
                 'let appAddOpen = true;',1))
             second=self.run_patch(tmp)
             self.assertEqual(second.returncode,0,second.stderr+second.stdout)
             migrated=index.read_text()
-            self.assertIn('let appAddOpen = false;',migrated)
+            self.assertIn('let appAddOpen = location.hash === "#apps-add";',migrated)
             self.assertEqual(migrated.count('id="sideloader-add-app"'),1)
             self.assertEqual(migrated.count('on("sideloader-add-app"'),1)
             third=self.run_patch(tmp)

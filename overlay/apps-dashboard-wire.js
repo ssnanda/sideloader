@@ -26,6 +26,10 @@
     const selected = sourceCatalog.find(app => app.bundleIdentifier === button.dataset.sourceApp);
     if (selected) importSourceApp(selected);
   });
+  root.querySelectorAll("[data-device-source-action]").forEach(button => button.onclick = () => {
+    const selected = sourceCatalog.find(app => app.bundleIdentifier === button.dataset.deviceSourceAction);
+    if (selected) importSourceApp(selected, true);
+  });
   root.querySelectorAll("[data-imported-app]").forEach(button => button.onclick = () => {
     const app = (S.apps || []).find(item => item.id === button.dataset.importedApp);
     const d = root.querySelector("#sideloader-app-device");

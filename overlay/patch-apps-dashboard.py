@@ -271,6 +271,18 @@ if load_catalog not in boot:
     boot = boot.replace('  render(); poll();', '  render(); poll();\n' + load_catalog, 1)
     h = h[:boot_start] + boot + h[boot_end:]
 
+# Populate installed apps immediately on page load. This is a read-only phone
+# inventory/profile scan and does not contact Apple or start signing.
+boot_start = h.find('async function boot() {')
+boot_end = h.find('\nfunction renderAuth(', boot_start)
+boot = h[boot_start:boot_end]
+auto_scan = '  if (!deviceAppScannedFor && !deviceAppBusy && (S.registered || []).length) scanDeviceApps((S.registered || [])[0].udid);'
+if auto_scan not in boot:
+    if load_catalog not in boot:
+        sys.exit('Apps dashboard patch: source catalog boot hook missing before auto scan')
+    boot = boot.replace(load_catalog, load_catalog + '\n' + auto_scan, 1)
+    h = h[:boot_start] + boot + h[boot_end:]
+
 # Only commit when ALL validation and transformations succeed.
 server.write_text(s)
 index.write_text(h)

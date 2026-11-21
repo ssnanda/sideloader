@@ -177,10 +177,9 @@ class Sources:
             if not matches:
                 raise ValueError("app not found in current source")
             item = matches[0]
-            current_ids = store.app_ids()
-            current_bundle = [store.app_view(a)["bundle_id"] for a in current_ids]
-            if bundle_id not in current_bundle and len(current_ids) >= 3:
-                raise ValueError("three-app limit reached; remove an app in Sideloop first")
+            # Stored IPA files are not active apps and do not consume Apple's
+            # three-app device allowance until the user explicitly installs
+            # them. Keep source browsing/import independent from that limit.
             # Download into a separate file; do not overwrite the global pending
             # upload used by Sideloop's browser upload endpoint.
             incoming = config.DATA / ".minisideload-source-download.ipa"

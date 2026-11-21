@@ -9,6 +9,8 @@
 .source-actions-row{display:flex;gap:10px;margin:18px 0;flex-wrap:wrap}
 .source-actions-row button{min-height:44px}
 .source-panel[hidden]{display:none!important}
+.source-card-actions{display:flex;align-items:center;gap:10px}
+.source-card-actions a{font-weight:700;text-decoration:none;padding:9px 4px}
 /* SideLoader mobile navigation and touch-first source cards */
 *{box-sizing:border-box}
 html{scroll-padding-bottom:calc(95px + env(safe-area-inset-bottom));-webkit-text-size-adjust:100%}
@@ -106,11 +108,15 @@ async function refresh(){
     const sec=node('section');
     const head=node('div',undefined,'heading');
     const title=node('strong',source.name);
+    const actions=node('div',undefined,'source-card-actions');
+    const view=node('a','View apps');
+    view.href='/#apps-add';
     const del=node('button','Remove','remove');
     del.addEventListener('click',()=>sourceConfirm('Remove source?',source.name+' will be removed from the saved source list. Imported IPAs remain available.','Remove source',async()=>{
       await api('/api/sources/remove',{id:source.id});await refresh();
     }));
-    head.append(title,del);
+    actions.append(view,del);
+    head.append(title,actions);
     sec.append(head,node('small',source.url));
     if(source.error)sec.append(node('p','Source unavailable: '+source.error));
     else sec.append(node('small',source.apps.length+' apps available in Apps tab'));
