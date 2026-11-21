@@ -283,6 +283,12 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertNotIn('id="sideloader-device-app-sync"', ui)
         self.assertIn('Installed apps', ui)
 
+    def test_imported_ipa_delete_does_not_use_settings_local_helper(self):
+        ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
+        self.assertIn('function importedIpaRemoveButton(app)', ui)
+        self.assertIn('${importedIpaRemoveButton(app)}', ui)
+        self.assertNotIn('${trash("app:", app.id, app.name)}', ui)
+
     def test_existing_dashboard_refreshes_apps_manager_on_rebuild(self):
         with tempfile.TemporaryDirectory() as tmp:
             p=self.setup(tmp)

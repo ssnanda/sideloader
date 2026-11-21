@@ -88,6 +88,12 @@ function sideLoaderAppIdSummary(rows) {
   return `App IDs: ${tracked} in use (SideLoader-observed) · Apple remaining/pending unavailable`;
 }
 
+function importedIpaRemoveButton(app) {
+  const key = "app:" + app.id;
+  const armed = confirmRemove === key;
+  return `<button class="iconbtn ${armed ? "armed" : ""}" data-remove="${esc(key)}" aria-label="Remove ${esc(app.name)}">${armed ? "Remove" : ic("trash-outline", 20)}</button>`;
+}
+
 function sideLoaderVersionStrip() {
   const core = S.sideloop_build || {};
   const backend = S.altserver_build || {};
@@ -160,7 +166,7 @@ function deviceAppsManager() {
       const installed = rows.some(row => deviceBundleMatches(row.bundle_id, app.bundle_id) || row.relatedManaged?.id === app.id);
       return `<div class="sl-app-entry"><span class="sl-app-detail"><b>${esc(app.name)}</b><small>${esc(app.version)} · ${esc(app.bundle_id)}</small></span>
         <button type="button" class="cap" data-imported-app="${esc(app.id)}" ${busy?"disabled":""}>${installed?"Re-sign":"Install"}</button>
-        ${trash("app:", app.id, app.name)}</div>`;
+        ${importedIpaRemoveButton(app)}</div>`;
     }).join("") || '<div class="foot">No imported IPA files.</div>'}
   </section>`;
   return `<div class="sl-app-manager">
