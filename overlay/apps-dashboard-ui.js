@@ -75,9 +75,19 @@ function signingDaysLeft(target, scannedExpiry=0) {
   if (!expiry) return "Signing expiry unavailable";
   const seconds = expiry - S.now;
   if (seconds <= 0) return "Signing expired";
-  const days = Math.ceil(seconds / 86400);
-  const total = S.config?.lifetime_days || 7;
-  return `${days} of ${total} days remaining`;
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  if (days > 0) return `${days}d ${hours}h remaining`;
+  const minutes = Math.max(1, Math.floor((seconds % 3600) / 60));
+  return hours > 0 ? `${hours}h ${minutes}m remaining` : `${minutes}m remaining`;
+}
+
+function signingExpiryText(target, scannedExpiry=0) {
+  const expiry = target?.signature?.expiry || scannedExpiry;
+  if (!expiry) return "Expiration unavailable";
+  return `Expires ${new Date(expiry * 1000).toLocaleString([], {
+    month:"short", day:"numeric", hour:"numeric", minute:"2-digit"
+  })}`;
 }
 
 function sideLoaderAppIdSummary(rows) {
@@ -185,9 +195,10 @@ function deviceAppsManager() {
       const disabled = busy || (!row.managed && !row.relatedManaged && !scanned);
       const target = row.managed?.targets?.find(t => t.udid === udid);
       const deviceSigning = signingDaysLeft(target, row.signing_expiry);
+      const expiryText = signingExpiryText(target, row.signing_expiry);
       const subtitle = row.relatedManaged ? `Saved IPA uses different bundle ID ${row.relatedManaged.bundle_id}` : row.bundle_id;
       return `<div class="sl-app-entry" data-bundle="${esc(row.bundle_id)}">
-        <span class="sl-app-detail"><span class="sl-installed-main"><b>${esc(row.name)}</b><strong class="sl-signing-days">${esc(deviceSigning)}</strong></span><small>${esc(subtitle)}${row.version?" · "+esc(row.version):""}</small></span>
+        <span class="sl-app-detail"><span class="sl-installed-main"><b>${esc(row.name)}</b><strong class="sl-signing-days">${esc(deviceSigning)}</strong></span><small>${esc(expiryText)} · ${esc(subtitle)}${row.version?" · "+esc(row.version):""}</small></span>
         <button type="button" class="cap ${row.installed?"":"solid"}" ${row.sourceMatch&&!row.managed?`data-device-source-action="${esc(row.sourceMatch.bundleIdentifier)}"`:`data-device-app-action="${esc(row.managed?.bundle_id || row.bundle_id)}"`} ${disabled?"disabled":""}>${button}</button>
       </div>`;
     }).join("")}</div>

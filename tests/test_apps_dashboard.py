@@ -232,8 +232,10 @@ class DashboardPatchTests(unittest.TestCase):
     def test_apps_manager_shows_signing_days_remaining(self):
         ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
         self.assertIn('function signingDaysLeft(target, scannedExpiry=0)', ui)
-        self.assertIn('Math.ceil(seconds / 86400)', ui)
-        self.assertIn('of ${total} days remaining', ui)
+        self.assertIn('Math.floor(seconds / 86400)', ui)
+        self.assertIn('${days}d ${hours}h remaining', ui)
+        self.assertIn('function signingExpiryText(target, scannedExpiry=0)', ui)
+        self.assertIn('Expires ${new Date(expiry * 1000).toLocaleString', ui)
         self.assertIn('function sideLoaderAppIdSummary()', ui)
         self.assertIn('Apple remaining/pending unavailable', ui)
         self.assertIn('row.signing_expiry', ui)
