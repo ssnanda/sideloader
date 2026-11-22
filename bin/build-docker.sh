@@ -13,12 +13,14 @@ LOGS=false
 NO_CACHE=false
 BUMP=true
 BUMP_ARGS=()
+RESET_USER=false
 
 usage() {
   cat <<'USAGE'
 Build SideLoader's Docker server locally on macOS or Ubuntu.
 
 Usage: ./bin/build-docker.sh [--no-start] [--open] [--logs] [--no-cache]
+                              [--reset-user]
                               [--skip-bump] [--no-push] [--help]
 
   (no args)    If the checkout has uncommitted changes, run bin/bump-version.sh
@@ -29,6 +31,7 @@ Usage: ./bin/build-docker.sh [--no-start] [--open] [--logs] [--no-cache]
   --open       Open the local dashboard in the default browser after starting.
   --logs       Follow container logs after starting; Ctrl-C stops log viewing.
   --no-cache   Force Docker to rebuild all image layers rather than reuse cache.
+  --reset-user Generate a new dashboard username and password, invalidating all sessions.
   --skip-bump  Build pending changes without running bump-version.sh.
   --no-push    Pass --no-push to bump-version.sh (commit locally only).
   --help       Show this help.
@@ -45,6 +48,7 @@ while [[ $# -gt 0 ]]; do
     --open) OPEN=true ;;
     --logs) LOGS=true ;;
     --no-cache) NO_CACHE=true ;;
+    --reset-user) RESET_USER=true ;;
     --skip-bump) BUMP=false ;;
     --no-push) BUMP_ARGS+=(--no-push) ;;
     -h|--help) usage; exit 0 ;;
@@ -96,6 +100,11 @@ if [[ ! -f "$UPSTREAM/.env" ]]; then
 fi
 mkdir -p "$UPSTREAM/data"
 chmod 700 "$UPSTREAM/data"
+credential_args=()
+if [[ "$RESET_USER" == true ]]; then credential_args+=(--reset); fi
+IFS=$'\t' read -r SIDELOADER_USER NEW_LOGIN_PASSWORD < <(
+  python3 "$ROOT_DIR/overlay/local_credentials.py" "$UPSTREAM/data/ui.json" "${credential_args[@]}"
+)
 python3 "$ROOT_DIR/overlay/patch-upstream.py" "$UPSTREAM" "$ROOT_DIR/overlay"
 python3 "$ROOT_DIR/overlay/patch-v2.py" "$UPSTREAM" "$ROOT_DIR/overlay"
 python3 "$ROOT_DIR/overlay/patch-navigation.py" "$UPSTREAM" "$ROOT_DIR/overlay"
@@ -115,7 +124,8 @@ python3 "$ROOT_DIR/overlay/patch-auto-resign.py" "$UPSTREAM" "$ROOT_DIR/overlay"
 python3 "$ROOT_DIR/overlay/patch-screen-flow.py" "$UPSTREAM" "$ROOT_DIR/overlay"
 python3 "$ROOT_DIR/overlay/patch-android.py" "$UPSTREAM" "$ROOT_DIR/overlay"
 python3 "$ROOT_DIR/overlay/patch-top-navigation.py" "$UPSTREAM" "$ROOT_DIR/overlay"
-python3 -m py_compile "$UPSTREAM/sideloop/server.py" "$UPSTREAM/sideloop/sources.py" "$UPSTREAM/sideloop/installed.py" "$UPSTREAM/sideloop/diagnostics.py" "$UPSTREAM/sideloop/github_sources.py" "$UPSTREAM/sideloop/github_scan.py" "$UPSTREAM/sideloop/retry_guard.py" "$UPSTREAM/sideloop/account.py" "$UPSTREAM/sideloop/backend_info.py" "$UPSTREAM/sideloop/sideloop_info.py" "$UPSTREAM/sideloop/device_app_inventory.py" "$UPSTREAM/sideloop/android.py" "$UPSTREAM/sideloop/watcher.py"
+python3 "$ROOT_DIR/overlay/patch-local-login.py" "$UPSTREAM"
+python3 -m py_compile "$UPSTREAM/sideloop/server.py" "$UPSTREAM/sideloop/auth.py" "$UPSTREAM/sideloop/sources.py" "$UPSTREAM/sideloop/installed.py" "$UPSTREAM/sideloop/diagnostics.py" "$UPSTREAM/sideloop/github_sources.py" "$UPSTREAM/sideloop/github_scan.py" "$UPSTREAM/sideloop/retry_guard.py" "$UPSTREAM/sideloop/account.py" "$UPSTREAM/sideloop/backend_info.py" "$UPSTREAM/sideloop/sideloop_info.py" "$UPSTREAM/sideloop/device_app_inventory.py" "$UPSTREAM/sideloop/android.py" "$UPSTREAM/sideloop/watcher.py"
 compose=( docker compose -f "$UPSTREAM/docker-compose.yml" -f "$OVERRIDE" )
 "${compose[@]}" config --quiet || { echo 'Docker Compose configuration is invalid.' >&2; exit 1; }
 
@@ -151,6 +161,11 @@ fi
 printf '\nSideLoader version: %s\n' "$(cat "$ROOT_DIR/VERSION")"
 printf 'Local build: %s\n' "$UPSTREAM"
 printf 'GitHub Actions: not used (local build).\n'
+printf 'Username: %s\n' "$SIDELOADER_USER"
+if [[ -n "$NEW_LOGIN_PASSWORD" ]]; then
+  printf 'Password: %s   (shown once - save it now)\n' "$NEW_LOGIN_PASSWORD"
+fi
+printf 'Reset: ./bin/build-docker.sh --reset-user\n'
 if [[ "$START" == true ]]; then
   printf 'Dashboard: http://localhost:38080\n'
   printf 'iPhone on same Wi-Fi: http://<server-LAN-IP>:38080\n'
