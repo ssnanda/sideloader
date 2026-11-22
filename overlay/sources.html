@@ -52,8 +52,10 @@ main.sl-confirming > :not(header):not(#sources-action){display:none!important}
 #sources-action .source-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}
 #sources-action .source-cancel{background:transparent;color:CanvasText;border:1px solid #8887}
 #sources-action .source-danger{background:#b72c3b}
+.top-nav{position:sticky;top:0;z-index:25;display:flex;justify-content:flex-end;align-items:center;gap:12px;min-height:52px;padding:7px max(16px,calc((100vw - 760px)/2));background:color-mix(in srgb,Canvas 88%,transparent);backdrop-filter:blur(18px);border-bottom:1px solid #8883}
+.top-version{color:GrayText;font-size:13px}.top-settings{position:relative}.top-settings summary{list-style:none;color:#087cf2;cursor:pointer;padding:9px 12px}.top-settings summary::-webkit-details-marker{display:none}.top-menu{position:absolute;right:0;top:100%;min-width:180px;padding:7px;background:Canvas;border:1px solid #8884;border-radius:12px;box-shadow:0 12px 35px #0003}.top-menu a{display:block;padding:10px 12px;text-decoration:none;border-radius:8px}.top-menu a:hover,.top-menu a[aria-current]{background:ButtonFace}.top-signout{border:0;background:none;color:#087cf2;font:inherit;cursor:pointer;padding:9px 0}@media(hover:hover){.top-settings:hover .top-menu{display:block}.top-settings:not(:hover):not([open]) .top-menu{display:none}}
 </style>
-</head><body><main><header><h1>Sources</h1></header><section id="sources-action" hidden aria-live="polite"></section>
+</head><body><header class="top-nav"><span class="top-version" id="top-version">SideLoader</span><details class="top-settings"><summary>Settings</summary><nav class="top-menu"><a href="/sources" aria-current="page">Sources</a><a href="/roadmap">Roadmap</a></nav></details><button class="top-signout" id="top-signout">Sign Out</button></header><main><header><h1>Sources</h1></header><section id="sources-action" hidden aria-live="polite"></section>
 <div id="status" class="status" role="status">Loading sources…</div><div id="sources"></div>
 <div class="source-actions-row"><button type="button" id="show-add-source">Add source</button><button type="button" id="show-github-scan">Scan GitHub</button></div>
 <section id="add-source-panel" class="source-panel" hidden><div class="heading"><strong>Add source URL</strong></div>
@@ -66,13 +68,11 @@ main.sl-confirming > :not(header):not(#sources-action){display:none!important}
 <div id="github-scan-result" class="status" role="status" style="margin-top:8px">No scan performed yet.</div>
 <button id="github-disconnect" type="button" class="remove" hidden>Forget saved GitHub token</button>
 <small>For private repositories, use a fine-grained token with read-only Contents permission.</small></section></main>
-<nav class="sources-tabs" aria-label="Primary navigation">
-  <a href="/#apps">Apps</a>
-  <a href="/sources" aria-current="page">Sources</a>
-</nav>
 <script>
 const $=id=>document.getElementById(id);
 let busy=false;
+const apiState=fetch('/api/state',{credentials:'same-origin',headers:{'X-Requested-With':'sideloop'}}).then(r=>r.json()).then(s=>$('top-version').textContent='SideLoader '+(s.sideloop_build?.side_loader_version||'unknown')).catch(()=>{});
+document.getElementById('top-signout').onclick=async()=>{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Requested-With':'sideloop'},body:'{}'});location.href='/'};
 function togglePanel(id){
   for(const panel of document.querySelectorAll('.source-panel')) panel.hidden=panel.id!==id || !panel.hidden;
 }

@@ -72,6 +72,7 @@ if 'from . import android\n' not in s:
 # so the marker-delimited blocks below can be refreshed on every build.
 V1_POST = '''            "/api/android/pair": android.pair,
             "/api/android/connect": android.connect,
+            "/api/android/enable-wifi": android.enable_wifi,
             "/api/android/disconnect": android.disconnect,
             "/api/android/install": lambda data: android.install(data, self.sources._urls()),
             "/api/android/repos/add": android.add_repo,

@@ -131,6 +131,13 @@ class AdbOutputTests(unittest.TestCase):
                                 'com.b': {'versionCode': None, 'installer': 'com.android.vending'},
                                 'com.c': {'versionCode': None, 'installer': None}})
 
+    def test_wifi_ipv4_from_route_or_wlan_address(self):
+        self.assertEqual(android._wifi_ipv4('1.1.1.1 via 192.168.1.1 dev wlan0 src 192.168.1.44 uid 2000'),
+                         '192.168.1.44')
+        self.assertEqual(android._wifi_ipv4('', 'inet 10.0.0.8/24 brd 10.0.0.255 scope global wlan0'),
+                         '10.0.0.8')
+        self.assertIsNone(android._wifi_ipv4('', 'inet6 fe80::1/64'))
+
     def test_address_and_code_validation(self):
         for bad in ('192.168.1.20', '192.168.1.20:0', '192.168.1.20:70000', 'a b:5555', '-x:5555'):
             with self.assertRaises(ValueError):

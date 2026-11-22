@@ -283,6 +283,41 @@ def connect(data):
     return {"ok": True, "name": model}
 
 
+def _wifi_ipv4(route_output, address_output=""):
+    """Extract the phone's active Wi-Fi IPv4 address from Android `ip` output."""
+    match = re.search(r"\bsrc\s+(\d{1,3}(?:\.\d{1,3}){3})\b", route_output)
+    if not match:
+        match = re.search(r"\binet\s+(\d{1,3}(?:\.\d{1,3}){3})/", address_output)
+    if not match:
+        return None
+    parts = match.group(1).split(".")
+    return match.group(1) if all(0 <= int(part) <= 255 for part in parts) else None
+
+
+def enable_wifi(data):
+    """Move an authorized USB phone to classic ADB-over-Wi-Fi automatically."""
+    with _LOCK:
+        srv = server()
+        serial = _device(data, srv)
+        live = _live(srv).get(serial, {})
+        if live.get("transport") != "usb":
+            raise ValueError("select an authorized USB-connected Android phone")
+        rc, route = adb("-s", serial, "shell", "ip", "route", "get", "1.1.1.1",
+                        timeout=10, srv=srv)
+        _, addresses = adb("-s", serial, "shell", "ip", "-f", "inet", "addr", "show", "wlan0",
+                           timeout=10, srv=srv)
+        ip = _wifi_ipv4(route if rc == 0 else "", addresses)
+        if not ip:
+            raise RuntimeError("The phone has no active Wi-Fi address; connect it to Wi-Fi and try again")
+        rc, out = adb("-s", serial, "tcpip", "5555", timeout=20, srv=srv)
+        if rc != 0 or "restarting in TCP mode" not in out:
+            raise RuntimeError("Could not enable ADB over Wi-Fi: " + (out[-240:] or "no response"))
+        time.sleep(1)
+    result = connect({"address": f"{ip}:5555"})
+    return {**result, "address": f"{ip}:5555",
+            "message": f"{result['name']} connected over Wi-Fi automatically."}
+
+
 def disconnect(data):
     address = _address(data.get("address"), "device address")
     with _LOCK:

@@ -98,6 +98,7 @@ function androidStep1(expanded, busy) {
     return `<div class="sl-app-entry">
       <span class="sl-app-detail"><b>${esc(d.name)}</b>
         <small>${usb ? "USB" : "Wi-Fi"} · ${esc(d.address)} · <span class="sl-android-state ${on ? "ok" : d.state === "unauthorized" ? "warn" : ""}">${on ? "Connected" : d.state === "unauthorized" ? (usb ? "Accept “Allow USB debugging?” on the phone" : "Not authorized — pair again") : "Offline"}</span></small></span>
+      ${usb && on ? `<button type="button" class="cap solid" data-android-enable-wifi="${esc(d.address)}" ${busy ? "disabled" : ""}>${androidBusy === "wifi:" + d.address ? "Connecting…" : "Use over Wi-Fi"}</button>` : ""}
       ${usb ? "" : on ? `<button type="button" class="cap" data-android-disconnect="${esc(d.address)}" ${busy ? "disabled" : ""}>Disconnect</button>`
            : `<button type="button" class="cap" data-android-connect="${esc(d.address)}" ${busy ? "disabled" : ""}>Reconnect</button>`}
       ${d.saved ? `<button type="button" class="cap" data-android-forget="${esc(d.address)}" ${busy ? "disabled" : ""} aria-label="Forget ${esc(d.name)}">Forget</button>` : ""}
@@ -114,6 +115,7 @@ function androidStep1(expanded, busy) {
   </details>`;
   const wifi = `<details class="sl-android-pair" id="android-pair-panel" ${androidPairOpen ? "open" : ""}>
     <summary>Option 2 · Wi-Fi (Wireless debugging)</summary>
+    ${devices.some(d=>d.transport==="usb"&&d.state==="device") ? '<p class="sl-android-auto-hint">USB phone detected. Use <b>Use over Wi-Fi</b> above to configure its Wi-Fi address automatically—no pairing IP, code, or connect port required.</p>' : ''}
     <div class="sl-android-grid">
       <label>Pairing IP:port<input class="fi" id="android-pair-address" placeholder="192.168.1.20:37123" inputmode="url" autocomplete="off"></label>
       <label>Pairing code<input class="fi" id="android-pair-code" placeholder="123456" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label>
@@ -270,6 +272,11 @@ function androidWire() {
   };
   button("android-connect", () => connect(val("android-connect-address")));
   root.querySelectorAll("[data-android-connect]").forEach(b => b.onclick = () => connect(b.dataset.androidConnect));
+  root.querySelectorAll("[data-android-enable-wifi]").forEach(b => b.onclick = async () => {
+    const serial=b.dataset.androidEnableWifi;
+    const r=await androidAct("wifi:"+serial,"/api/android/enable-wifi",{device:serial},r=>r.message);
+    if(r){androidDevice=r.address;androidPairOpen=false;await androidLoad(true);}
+  });
   root.querySelectorAll("[data-android-disconnect]").forEach(b => b.onclick = async () => {
     await androidAct("disconnect", "/api/android/disconnect", {address:b.dataset.androidDisconnect}, "Disconnected.");
     await androidLoad();
