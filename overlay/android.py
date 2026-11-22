@@ -8,6 +8,7 @@ from a GitHub release and `adb install -r` it on the paired phone.
 Persistent state lives in DATA/android/ (ADB key, saved phones, extra repos,
 cached APK metadata) so container rebuilds do not require re-pairing.
 """
+import hashlib
 import json
 import os
 import re
@@ -34,6 +35,7 @@ ADDRESS = re.compile(r"^(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9A-Fa-f:]+\]|[A-Za-z0-9]
 PAIR_CODE = re.compile(r"^\d{6}$")
 SERIAL = re.compile(r"^[A-Za-z0-9._:\[\]-]{1,200}$")
 PACKAGE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$")
+GENERIC_NAMES = {"app-release", "app-debug", "app-universal-release", "release", "app", "base"}
 REPO_URL = re.compile(r"^https://github\.com/([A-Za-z0-9-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$")
 
 
@@ -180,12 +182,26 @@ def parse_mdns(output):
 
 
 def parse_packages(output):
+    """`pm list packages -3 -i --show-versioncode` -> {package: {...}}."""
     installed = {}
     for line in output.splitlines():
-        m = re.match(r"^package:(\S+)(?:\s+versionCode:(\d+))?", line.strip())
-        if m:
-            installed[m.group(1)] = int(m.group(2)) if m.group(2) else None
+        m = re.match(r"^package:(\S+)(.*)$", line.strip())
+        if not m:
+            continue
+        rest = m.group(2)
+        code = re.search(r"versionCode:(\d+)", rest)
+        installer = re.search(r"installer=(\S+)", rest)
+        installer = installer.group(1) if installer else None
+        installed[m.group(1)] = {"versionCode": int(code.group(1)) if code else None,
+                                 "installer": None if installer in (None, "null") else installer}
     return installed
+
+
+# Apps put there by a store are not "sideloaded"; anything else (adb, a
+# file manager or browser download) is listed by default, as on the Apple side.
+STORES = {"com.android.vending", "com.amazon.venezia", "com.sec.android.app.samsungapps",
+          "com.huawei.appmarket", "com.xiaomi.market", "com.heytap.market", "com.oppo.market",
+          "com.bbk.appstore", "com.google.android.feedback"}
 
 
 def _saved():
@@ -291,15 +307,104 @@ def _device(data, srv):
 
 
 def installed(data):
+    """Scan third-party apps; versionName only for sideloaded ones (cheap)."""
     with _LOCK:
         srv = server()
         serial = _device(data, srv)
-        rc, out = adb("-s", serial, "shell", "pm", "list", "packages", "-3", "--show-versioncode", timeout=30, srv=srv)
+        rc, out = adb("-s", serial, "shell", "pm", "list", "packages", "-3", "-i", "--show-versioncode",
+                      timeout=30, srv=srv)
         if rc != 0 or "Unknown option" in out:
-            rc, out = adb("-s", serial, "shell", "pm", "list", "packages", "-3", timeout=30, srv=srv)
-    if rc != 0:
-        raise RuntimeError(out[-300:] or "cannot list Android apps")
-    return {"packages": parse_packages(out)}
+            rc, out = adb("-s", serial, "shell", "pm", "list", "packages", "-3", "-i", timeout=30, srv=srv)
+        if rc != 0:
+            raise RuntimeError(out[-300:] or "cannot list Android apps")
+        packages = parse_packages(out)
+        known = {a["package"]: a["name"] for a in _imported() if a.get("package")}
+        known.update({k: v.get("name", "") for k, v in _read("apk-names.json", {}).items()})
+        for pkg, row in packages.items():
+            row["sideloaded"] = row["installer"] not in STORES
+            row["name"] = known.get(pkg) or ""
+            if row["sideloaded"] and PACKAGE.fullmatch(pkg):
+                _, dump = adb("-s", serial, "shell", "dumpsys", "package", pkg, timeout=15, srv=srv)
+                vn = re.search(r"versionName=(\S+)", dump)
+                row["versionName"] = vn.group(1) if vn else ""
+                if row["versionCode"] is None:
+                    vc = re.search(r"versionCode=(\d+)", dump)
+                    row["versionCode"] = int(vc.group(1)) if vc else None
+    return {"packages": packages}
+
+
+def uninstall(data):
+    package = str(data.get("package", "")).strip()
+    if not PACKAGE.fullmatch(package):
+        raise ValueError("invalid Android package name")
+    if data.get("acknowledge") is not True:
+        raise ValueError("Confirm the uninstall; the app's data on the phone is deleted")
+    with _LOCK:
+        srv = server()
+        serial = _device(data, srv)
+        rc, out = adb("-s", serial, "uninstall", package, timeout=60, srv=srv)
+    if rc != 0 or "Success" not in out:
+        raise RuntimeError("Uninstall failed: " + (out[-300:] or "no response"))
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- imported APKs
+
+def _apk_dir():
+    path = _dir() / "apks"
+    path.mkdir(exist_ok=True)
+    return path
+
+
+def _imported():
+    rows = _read("apks.json", [])
+    return [r for r in rows if isinstance(r, dict) and re.fullmatch(r"[0-9a-f]{16}", str(r.get("id", "")))
+            and (_apk_dir() / f"{r['id']}.apk").is_file()]
+
+
+def import_apk(stream, length, filename=""):
+    if not 0 < length <= MAX_APK:
+        raise ValueError("empty or too large APK")
+    incoming = _apk_dir() / ".upload.apk"
+    digest = hashlib.sha256()
+    fd = os.open(incoming, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as out:
+            left = length
+            while left and (chunk := stream.read(min(left, 1 << 20))):
+                digest.update(chunk)
+                out.write(chunk)
+                left -= len(chunk)
+        if left:
+            raise ValueError("upload interrupted")
+        info = inspect_apk(incoming)
+        apk_id = digest.hexdigest()[:16]
+        os.replace(incoming, _apk_dir() / f"{apk_id}.apk")
+    finally:
+        incoming.unlink(missing_ok=True)
+    name = re.sub(r"\.apk$", "", os.path.basename(str(filename)), flags=re.I).strip()[:80]
+    if not name or name.lower() in GENERIC_NAMES:
+        name = info["package"].rsplit(".", 1)[-1]
+    row = {"id": apk_id, "name": name, "package": info["package"], "versionName": info.get("versionName", ""),
+           "versionCode": info.get("versionCode"), "size": length, "added": int(time.time())}
+    with _LOCK:
+        rows = [r for r in _imported() if r["id"] != apk_id]
+        _write("apks.json", rows + [row])
+    return {"ok": True, "apk": row}
+
+
+def remove_imported(data):
+    apk_id = str(data.get("id", ""))
+    if not re.fullmatch(r"[0-9a-f]{16}", apk_id):
+        raise ValueError("unknown imported APK")
+    with _LOCK:
+        (_apk_dir() / f"{apk_id}.apk").unlink(missing_ok=True)
+        _write("apks.json", [r for r in _imported() if r["id"] != apk_id])
+    return {"ok": True}
+
+
+def imported(data=None):
+    return {"apks": _imported()}
 
 
 # ---------------------------------------------------------------- APK metadata
@@ -464,9 +569,54 @@ def _repo_apks(owner, repo, token):
         break
     # Gradle's default file names say nothing; show the repository instead.
     for app in apps:
-        if app["name"].lower() in ("app-release", "app-debug", "app-universal-release", "release", "app"):
+        if app["name"].lower() in GENERIC_NAMES:
             app["name"] = repo
+        app["origin"] = "release"
+        app["source_name"] = f"{owner}/{repo} releases"
     return apps, ""
+
+
+def _source_json(url):
+    from .sources import _open, _read_limited, MAX_SOURCE
+    if github_sources.is_ref(url):
+        obj, final = github_sources.source_contents(url, MAX_SOURCE)
+        return obj, final
+    with _open(url) as response:
+        return json.loads(_read_limited(response, MAX_SOURCE)), response.geturl()
+
+
+def source_entries(obj, base_url):
+    """Android entries in an AltStore source: a top-level "android" object or
+    list, and/or an "android" object inside an iOS app entry. Fields:
+    packageName, name, version, buildVersion (versionCode), downloadURL."""
+    if not isinstance(obj, dict):
+        return []
+    found = []
+    top = obj.get("android")
+    found.extend(top if isinstance(top, list) else [top] if isinstance(top, dict) else [])
+    for app in obj.get("apps") or []:
+        if isinstance(app, dict) and isinstance(app.get("android"), dict):
+            found.append({"name": app.get("name"), **app["android"]})
+    rows = []
+    for e in found:
+        if not isinstance(e, dict) or str(e.get("type", "apk")).lower() != "apk":
+            continue
+        url = e.get("downloadURL")
+        if not isinstance(url, str) or not url.strip():
+            continue
+        url = urllib.parse.urljoin(base_url, url.strip())
+        if urllib.parse.urlsplit(url).scheme != "https":
+            continue
+        package = str(e.get("packageName") or "")
+        code = str(e.get("buildVersion") or e.get("versionCode") or "")
+        rows.append({"id": hashlib.sha256(url.encode()).hexdigest()[:16], "asset_key": "url:" + url,
+                     "url": url, "name": str(e.get("name") or package or "Android app"),
+                     "package": package if PACKAGE.fullmatch(package) else "",
+                     "versionName": str(e.get("version") or ""),
+                     "versionCode": int(code) if code.isdigit() else None,
+                     "size": e.get("size") if isinstance(e.get("size"), int) else 0,
+                     "origin": "source", "source_name": str(obj.get("name") or "Source")})
+    return rows
 
 
 def catalog(source_urls, force=False):
@@ -477,6 +627,14 @@ def catalog(source_urls, force=False):
         if not force and _CATALOG["key"] == key and time.time() - _CATALOG["at"] < CATALOG_TTL:
             return _CATALOG["value"]
     apps, warnings = [], []
+    # 1) Android entries declared in saved AltStore sources (same JSON file).
+    for url in source_urls:
+        try:
+            obj, final = _source_json(url)
+            apps.extend(source_entries(obj, final))
+        except (OSError, ValueError, urllib.error.URLError) as exc:
+            warnings.append(f"{url.rsplit('/', 2)[-2] if '/' in url else url}: source unreadable ({type(exc).__name__})")
+    # 2) .apk assets of the newest GitHub release of each source repository.
     for owner, repo in targets:
         try:
             rows, warning = _repo_apks(owner, repo, token)
@@ -485,6 +643,14 @@ def catalog(source_urls, force=False):
         apps.extend(rows)
         if warning:
             warnings.append(warning)
+    # A source entry usually points at a release asset too; keep one row per
+    # download URL, preferring the source entry (it declares package/version).
+    seen, unique = set(), []
+    for app in apps:
+        if app["url"] and app["url"] not in seen:
+            seen.add(app["url"])
+            unique.append(app)
+    apps = unique
     extra = {(_repo_of(u) or ("", ""))[:2] for u in _read("repos.json", [])}
     value = {"apps": apps, "warnings": warnings,
              "repos": [{"owner": o, "repo": r, "extra": (o, r) in extra} for o, r in targets]}
@@ -493,15 +659,46 @@ def catalog(source_urls, force=False):
     return value
 
 
+def _adb_install(address, path, srv):
+    rc, out = adb("-s", address, "install", "-r", str(path), timeout=900, srv=srv)
+    if rc != 0 or "Success" not in out:
+        reason = re.search(r"INSTALL_[A-Z_]+[^\n]*", out)
+        hint = ""
+        if reason and "UPDATE_INCOMPATIBLE" in reason.group(0):
+            hint = " The installed copy is signed with a different key; uninstall it on the phone first."
+        if reason and "VERSION_DOWNGRADE" in reason.group(0):
+            hint = " The phone has a newer version; uninstall it first to go back."
+        raise RuntimeError("Install failed: " + (reason.group(0) if reason else out[-300:]) + hint)
+
+
+def _remember_name(info, name):
+    names = _read("apk-names.json", {})
+    if name and info.get("package"):
+        names[info["package"]] = {"name": name}
+        _write("apk-names.json", dict(list(names.items())[-500:]))
+
+
 def install(data, source_urls):
     from .sources import _open  # SSRF-checked opener with private-repo support
+    if data.get("imported"):
+        apk_id = str(data["imported"])
+        with _LOCK:
+            row = next((r for r in _imported() if r["id"] == apk_id), None)
+            if not row:
+                raise ValueError("imported APK not found")
+            srv = server()
+            address = _device(data, srv)
+            _adb_install(address, _apk_dir() / f"{apk_id}.apk", srv)
+            _remember_name(row, row["name"])
+        return {"ok": True, "package": row["package"], "versionName": row.get("versionName", ""),
+                "versionCode": row.get("versionCode")}
     asset_id = str(data.get("id", ""))
     with _LOCK:
         app = next((a for a in catalog(source_urls)["apps"] if a["id"] == asset_id), None)
         if not app:
             app = next((a for a in catalog(source_urls, force=True)["apps"] if a["id"] == asset_id), None)
         if not app:
-            raise ValueError("APK not found in current GitHub releases")
+            raise ValueError("APK not found in saved sources or GitHub releases")
         srv = server()
         address = _device(data, srv)
         incoming = _dir() / ".download.apk"
@@ -518,18 +715,16 @@ def install(data, source_urls):
                             raise ValueError("APK is over the 2 GiB limit")
                         out.write(chunk)
             info = inspect_apk(incoming)
-            rc, out = adb("-s", address, "install", "-r", str(incoming), timeout=900, srv=srv)
+            if app.get("package") and info["package"] != app["package"]:
+                raise ValueError(f"APK package {info['package']} differs from source listing "
+                                 f"{app['package']}; refusing installation")
+            meta = _read("apk-meta.json", {})
+            meta[app["asset_key"]] = info
+            _write("apk-meta.json", dict(list(meta.items())[-500:]))
+            _CATALOG["at"] = 0
+            _adb_install(address, incoming, srv)
+            _remember_name(info, app["name"])
         finally:
             incoming.unlink(missing_ok=True)
-        meta = _read("apk-meta.json", {})
-        meta[app["asset_key"]] = info
-        _write("apk-meta.json", dict(list(meta.items())[-500:]))
-        _CATALOG["at"] = 0
-    if rc != 0 or "Success" not in out:
-        reason = re.search(r"INSTALL_[A-Z_]+[^\n]*", out)
-        hint = ""
-        if reason and "UPDATE_INCOMPATIBLE" in reason.group(0):
-            hint = " The installed copy is signed with a different key; uninstall it on the phone first."
-        raise RuntimeError("Install failed: " + (reason.group(0) if reason else out[-300:]) + hint)
     return {"ok": True, "package": info["package"], "versionName": info.get("versionName", ""),
             "versionCode": info.get("versionCode")}

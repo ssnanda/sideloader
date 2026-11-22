@@ -125,8 +125,11 @@ class AdbOutputTests(unittest.TestCase):
                 'adb-1A2B\t_adb-tls-connect._tcp\t192.168.1.20:41234\n'
                 'adb-1A2B\t_adb-tls-pairing._tcp\t192.168.1.20:37000\n')
         self.assertEqual(android.parse_mdns(mdns), [{'name': 'adb-1A2B', 'address': '192.168.1.20:41234'}])
-        pkgs = android.parse_packages('package:com.a versionCode:7\npackage:com.b\n')
-        self.assertEqual(pkgs, {'com.a': 7, 'com.b': None})
+        pkgs = android.parse_packages('package:com.a versionCode:7 installer=null\n'
+                                      'package:com.b  installer=com.android.vending\npackage:com.c\n')
+        self.assertEqual(pkgs, {'com.a': {'versionCode': 7, 'installer': None},
+                                'com.b': {'versionCode': None, 'installer': 'com.android.vending'},
+                                'com.c': {'versionCode': None, 'installer': None}})
 
     def test_address_and_code_validation(self):
         for bad in ('192.168.1.20', '192.168.1.20:0', '192.168.1.20:70000', 'a b:5555', '-x:5555'):
@@ -142,6 +145,49 @@ class AdbOutputTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as ctx:
                 android.pair({'address': '192.168.1.20:37000', 'code': '123456'})
         self.assertNotIn('123456', str(ctx.exception))
+
+
+class SourceAndImportTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        config.DATA = Path(directory.name)
+
+    def test_altstore_android_entries(self):
+        obj = {'name': 'AJ Ops', 'apps': [
+                   {'name': 'Front', 'android': {'packageName': 'com.x.front', 'version': '2.0',
+                                                 'buildVersion': '20', 'downloadURL': 'front.apk'}}],
+               'android': {'name': 'AJ Ops', 'packageName': 'com.itspector.ajops', 'version': '1.3.15',
+                           'buildVersion': '118', 'type': 'apk',
+                           'downloadURL': 'https://github.com/o/r/releases/download/android-latest/a.apk'}}
+        rows = android.source_entries(obj, 'https://raw.githubusercontent.com/o/r/main/altstore.json')
+        self.assertEqual([(r['name'], r['package'], r['versionCode'], r['origin']) for r in rows],
+                         [('AJ Ops', 'com.itspector.ajops', 118, 'source'), ('Front', 'com.x.front', 20, 'source')])
+        self.assertEqual(rows[1]['url'], 'https://raw.githubusercontent.com/o/r/main/front.apk')
+        bad = {'android': [{'type': 'aab', 'downloadURL': 'https://x/a.aab'},
+                           {'downloadURL': 'http://insecure/a.apk'}, {'name': 'no url'}]}
+        self.assertEqual(android.source_entries(bad, 'https://x/'), [])
+
+    def test_import_list_and_remove(self):
+        data = io.BytesIO()
+        with zipfile.ZipFile(data, 'w') as z:
+            z.writestr('AndroidManifest.xml', axml())
+        raw = data.getvalue()
+        row = android.import_apk(io.BytesIO(raw), len(raw), 'My App.apk')['apk']
+        self.assertEqual((row['name'], row['package'], row['versionCode']), ('My App', 'com.example.app', 112))
+        self.assertEqual([r['id'] for r in android.imported()['apks']], [row['id']])
+        android.remove_imported({'id': row['id']})
+        self.assertEqual(android.imported()['apks'], [])
+        with self.assertRaises(ValueError):
+            android.import_apk(io.BytesIO(b'not a zip'), 9, 'x.apk')
+        with self.assertRaises(ValueError):
+            android.import_apk(io.BytesIO(raw), len(raw) + 10, 'short.apk')
+
+    def test_uninstall_requires_acknowledgement_and_valid_package(self):
+        with self.assertRaises(ValueError):
+            android.uninstall({'package': 'com.example.app', 'device': 'R5CT1'})
+        with self.assertRaises(ValueError):
+            android.uninstall({'package': 'bad name', 'acknowledge': True})
 
 
 class RepoTests(unittest.TestCase):
@@ -192,6 +238,11 @@ def handler(app):
 
         def do_POST(self):
             pass
+
+        def do_PUT(self):
+            pass
+
+    return Handler
 '''
 PAGE = '''<html><head><style>
 body{}
@@ -231,12 +282,34 @@ class PatchTests(unittest.TestCase):
             self.assertIn('from . import android\n', server)
             self.assertEqual(server.count('"/api/android/install"'), 1)
             self.assertEqual(server.count('if path.startswith("/api/android/"):'), 1)
+            self.assertEqual(server.count('== "/api/apk"'), 1)
+            self.assertIn('"/api/android/uninstall"', server)
             self.assertEqual(page.count('/* SideLoader Android v1 start */'), 1)
             self.assertEqual(page.count('/* SideLoader Android v1 css start */'), 1)
             self.assertIn('if (!slPlatformInner) return slPlatformView();', page)
             self.assertIn('androidWire(); /* SideLoader Android wire */', page)
             self.assertIn('coreutils tzdata adb \\', docker)
             self.assertTrue((root / 'sideloop/android.py').exists())
+
+    def test_migrates_v1_routes(self):
+        v1 = SERVER.replace('            "/api/recheck": self.recheck,\n',
+            '            "/api/android/pair": android.pair,\n'
+            '            "/api/android/connect": android.connect,\n'
+            '            "/api/android/disconnect": android.disconnect,\n'
+            '            "/api/android/install": lambda data: android.install(data, self.sources._urls()),\n'
+            '            "/api/android/repos/add": android.add_repo,\n'
+            '            "/api/android/repos/remove": android.remove_repo,\n'
+            '            "/api/recheck": self.recheck,\n')
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / 'sideloop').mkdir()
+            (root / 'sideloop/server.py').write_text(v1)
+            (root / 'sideloop/index.html').write_text(PAGE)
+            (root / 'Dockerfile').write_text(DOCKER)
+            self.assertEqual(self.run_patch(root).returncode, 0)
+            server = (root / 'sideloop/server.py').read_text()
+            self.assertEqual(server.count('"/api/android/pair"'), 1)
+            self.assertIn('"/api/android/imported/remove"', server)
 
     def test_refuses_without_sources_api(self):
         with tempfile.TemporaryDirectory() as d:

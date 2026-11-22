@@ -13,13 +13,34 @@ The top of **Apps** (`/#apps`) has an **Apple / Android** switch, remembered per
 2. **Wi-Fi (Android 11+, same network).** Open Developer options → **Wireless debugging** → **Pair device with pairing code**. Enter the pairing IP:port and the 6-digit code, then click **Pair**. Then enter the **IP address & port** from the main Wireless debugging screen and click **Connect**.
    - SideLoader remembers the phone and reconnects on later visits.
    - The connect port changes when Wireless debugging restarts; use **Reconnect** or enter the new port.
-3. **Install.** The **Apps from GitHub releases** list shows `.apk` assets from the newest non-draft release of every repository behind your saved sources, plus repositories added with **Add repo**. The button reads **Install**, **Update**, **Reinstall** or **Installed**, comparing the phone's version code with the APK's. Installs run `adb install -r`, which keeps app data. An APK signed with a different key than the installed copy is refused; uninstall it on the phone first.
+The Android side mirrors Apple's steps:
+
+- **Step 1 · Connect your Android** lists phones (USB or Wi-Fi) with the two connection options above.
+- **Step 2 · Apps** has a phone picker, **Scan Android** and **Add app**.
+  - **Installed apps** lists sideloaded apps (not installed by a store). **Show store apps** lists everything.
+  - Each installed app has **Uninstall** (after confirmation; this deletes its data). An **Update** button appears when a newer version is known.
+- **Add app** opens two panels, like Apple:
+  - **From Sources** lists Android entries from your saved `altstore.json` sources, plus `.apk` assets of each source repository's newest GitHub release (one row per download URL).
+  - **Imported APKs** holds uploaded `.apk` files (**Import APK**).
+- Installs run `adb install -r`, which keeps app data. Install refuses:
+  - an APK whose package differs from its source listing;
+  - an APK signed with a different key than the installed copy (uninstall that copy first).
+
+Android entries in `altstore.json` go in a top-level `android` object (or list), or in an `android` object inside an iOS app entry:
+
+```json
+"android": {"name": "AJ Ops", "packageName": "com.itspector.ajops", "version": "1.3.15",
+            "buildVersion": "118", "type": "apk",
+            "downloadURL": "https://github.com/ssnanda/ajopsios/releases/download/android-latest/ajopsios.apk"}
+```
+
+`buildVersion` is the Android versionCode. It lets SideLoader show **Install**, **Update** or **Installed** without downloading the APK.
 
 Implementation notes:
 
 - The image gains Debian's `adb` package.
 - The container's fallback adb server uses port 5038, so it never clashes with a host adb on 5037.
-- The adb key, saved phones, extra repositories and APK metadata live in `build/sideloop/data/android/`. Rebuilds don't require re-pairing.
+- The adb key, saved phones, imported APKs (`apks/`), extra repositories and APK metadata live in `build/sideloop/data/android/`. Rebuilds don't require re-pairing.
 - GitHub release listings are cached for 5 minutes. **Refresh** forces a reload.
 - The saved read-only GitHub token, if any, is used for private repositories.
 - The overlay is `overlay/patch-android.py`, `android.py`, `android-ui.js` and `android.css`. Tests are in `tests/test_android.py`.

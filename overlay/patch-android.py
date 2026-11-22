@@ -68,16 +68,16 @@ if 'self.sources = Sources()' not in s:
 if 'from . import android\n' not in s:
     s = once(s, 'from . import auth, config, ipa, pairing, store\n',
              'from . import auth, config, ipa, pairing, store\nfrom . import android\n', 'import')
-s = scoped(s, '    def routes(self):', '\n\ndef handler(app):', '        return {\n',
-           '''            "/api/android/pair": android.pair,
+# Earlier overlay generations inserted unmarked v1 blocks; drop them exactly
+# so the marker-delimited blocks below can be refreshed on every build.
+V1_POST = '''            "/api/android/pair": android.pair,
             "/api/android/connect": android.connect,
             "/api/android/disconnect": android.disconnect,
             "/api/android/install": lambda data: android.install(data, self.sources._urls()),
             "/api/android/repos/add": android.add_repo,
             "/api/android/repos/remove": android.remove_repo,
-''', '"/api/android/pair"', 'POST routes', after=True)
-s = scoped(s, '        def do_GET(self):', '        def do_POST(self):', '            self.error(404, "not found")',
-           '''            if path.startswith("/api/android/"):
+'''
+V1_GET = '''            if path.startswith("/api/android/"):
                 q = urllib.parse.parse_qs(query)
                 try:
                     if path == "/api/android/state":
@@ -90,7 +90,80 @@ s = scoped(s, '        def do_GET(self):', '        def do_POST(self):', '      
                     return self.error(409, str(e))
                 except ValueError as e:
                     return self.error(400, str(e))
-''', 'if path.startswith("/api/android/"):', 'GET routes')
+'''
+for old in (V1_POST, V1_GET):
+    if s.count(old) > 1:
+        fail('server', 'duplicate v1 Android routes')
+    s = s.replace(old, '')
+if '"/api/android/' in s and '# SideLoader Android POST start' not in s:
+    fail('server', 'unrecognized Android routes from another overlay version')
+
+POST = '''            # SideLoader Android POST start
+            "/api/android/pair": android.pair,
+            "/api/android/connect": android.connect,
+            "/api/android/disconnect": android.disconnect,
+            "/api/android/install": lambda data: android.install(data, self.sources._urls()),
+            "/api/android/uninstall": android.uninstall,
+            "/api/android/imported/remove": android.remove_imported,
+            "/api/android/repos/add": android.add_repo,
+            "/api/android/repos/remove": android.remove_repo,
+            # SideLoader Android POST end
+'''
+GET = '''            # SideLoader Android GET start
+            if path.startswith("/api/android/"):
+                q = urllib.parse.parse_qs(query)
+                try:
+                    if path == "/api/android/state":
+                        return self.send(200, android.state())
+                    if path == "/api/android/catalog":
+                        return self.send(200, android.catalog(app.sources._urls(), q.get("force") == ["1"]))
+                    if path == "/api/android/installed":
+                        return self.send(200, android.installed({"device": q.get("device", [""])[0]}))
+                    if path == "/api/android/imported":
+                        return self.send(200, android.imported())
+                except RuntimeError as e:
+                    return self.error(409, str(e))
+                except ValueError as e:
+                    return self.error(400, str(e))
+            # SideLoader Android GET end
+'''
+PUT = '''            # SideLoader Android PUT start
+            if self.path.partition("?")[0] == "/api/apk":
+                if not self.same_origin():
+                    return self.error(403, "bad request origin")
+                if not self.authed():
+                    return self.error(401, "sign in first")
+                name = urllib.parse.unquote(self.headers.get("X-Filename") or "")
+                try:
+                    return self.send(200, android.import_apk(
+                        self.rfile, int(self.headers.get("Content-Length") or 0), name))
+                except ValueError as e:
+                    return self.error(400, str(e))
+            # SideLoader Android PUT end
+'''
+
+
+def marked(source, start, end, content, region_start, region_end, anchor, label, after):
+    if source.count(start) > 1:
+        fail(label, 'duplicate markers')
+    a = source.find(start)
+    if a >= 0:
+        line = source.rfind('\n', 0, a) + 1
+        b = source.find(end, a)
+        if b < 0:
+            fail(label, 'unterminated block')
+        stop = source.find('\n', b) + 1
+        return source[:line] + content + source[stop:]
+    return scoped(source, region_start, region_end, anchor, content, start, label, after=after)
+
+
+s = marked(s, '# SideLoader Android POST start', '# SideLoader Android POST end', POST,
+           '    def routes(self):', '\n\ndef handler(app):', '        return {\n', 'POST routes', True)
+s = marked(s, '# SideLoader Android GET start', '# SideLoader Android GET end', GET,
+           '        def do_GET(self):', '        def do_POST(self):', '            self.error(404, "not found")',
+           'GET routes', False)
+s = marked(s, '# SideLoader Android PUT start', '# SideLoader Android PUT end', PUT,
+           '        def do_PUT(self):\n', '\n    return Handler', '        def do_PUT(self):\n', 'APK upload', True)
 
 # --- index.html ------------------------------------------------------------
 if 'function appsView() {' not in h or '\nfunction wire() {' not in h:
