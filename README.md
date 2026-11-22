@@ -1,5 +1,15 @@
 undefined
 
+## iPhone over Wi-Fi on macOS
+
+The iPhone no longer needs the cable once the Mac can see it on Wi-Fi.
+
+- **Why it was USB-only:** macOS's device service lists Wi-Fi iPhones with a macOS-format IPv6 address (address family 30). The container's libusbmuxd 2.1.0 drops that record. libimobiledevice would also try to reach the phone's link-local address directly, which the Docker Desktop VM can't do.
+- **What changed:** `bin/lib/usbmux-relay.py` now presents Wi-Fi iPhones to the container as devices reached through the Mac's own tunnel. That's the same `Connect` path a cable uses. After a successful connection the relay passes bytes through untouched. When a phone is on both cable and Wi-Fi, the cable is listed.
+- **Requirements:** the phone has been trusted over USB once, **Show this iPhone when on Wi-Fi** is on in Finder, and the phone is unlocked or awake on the same network. `./bin/build-docker.sh` reinstalls the relay LaunchAgent, so the change applies on the next build.
+- **Turning it off:** pass `--usb-only` to the relay.
+- **Display:** the container can't tell cable from Wi-Fi, so SideLoader may label a Wi-Fi connection as USB.
+
 ## Android APK install (Apple/Android switch on Apps)
 
 The top of **Apps** (`/#apps`) has an **Apple / Android** switch, remembered per browser. Apple keeps the existing flow unchanged.
