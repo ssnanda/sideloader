@@ -30,6 +30,11 @@ class AutoResignTests(unittest.TestCase):
         self.assertLess(build.index("patch-auto-resign.py"),
                         build.index("patch-screen-flow.py"))
 
+    def test_legacy_watcher_patches_accept_canonical_repeat_build(self):
+        for name in ("patch-retry-guard.py", "patch-apple-verification.py"):
+            source = (ROOT / "overlay" / name).read_text()
+            self.assertIn('canonical_watcher = "RENEW_BEFORE_SECONDS = 6 * 60 * 60"', source)
+
 
 if __name__ == "__main__":
     unittest.main()

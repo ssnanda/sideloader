@@ -44,13 +44,16 @@ if '        return save_account(self, data)' not in source:
     server.write_text(updated)
 
 watcher = root / "sideloop" / "watcher.py"
-replace(watcher,
-    "from . import config, store, retry_guard",
-    "from . import config, store, retry_guard\nfrom .account import is_verified",
-    "scheduler import")
-replace(watcher,
-    '            job = self.jobs.claim_auto()',
-    '''            # Do not send background Apple authentication requests when an
+watcher_source = watcher.read_text()
+canonical_watcher = "RENEW_BEFORE_SECONDS = 6 * 60 * 60" in watcher_source
+if not canonical_watcher:
+    replace(watcher,
+        "from . import config, store, retry_guard",
+        "from . import config, store, retry_guard\nfrom .account import is_verified",
+        "scheduler import")
+    replace(watcher,
+        '            job = self.jobs.claim_auto()',
+        '''            # Do not send background Apple authentication requests when an
             # account has merely been saved but has never signed successfully.
             if not is_verified():
                 with self.lock:
@@ -58,7 +61,7 @@ replace(watcher,
                 self.schedule()
                 continue
             job = self.jobs.claim_auto()''',
-    "disable unverified automatic sign-in")
+        "disable unverified automatic sign-in")
 
 shell = root / "scripts" / "refresh.sh"
 # patch-one-attempt.py later inserts its success line right after the same

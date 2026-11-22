@@ -46,20 +46,23 @@ replace(server,
     '            "/api/signing/resume": self.signing_resume,',
     "resume route")
 watcher = pkg / "watcher.py"
-replace(watcher,
-    "from . import config, store",
-    "from . import config, store, retry_guard",
-    "watcher import")
-replace(watcher,
-    '            job = self.jobs.claim_auto()',
-    '''            # Never retry failed Apple signing automatically.
+watcher_source = watcher.read_text()
+canonical_watcher = "RENEW_BEFORE_SECONDS = 6 * 60 * 60" in watcher_source
+if not canonical_watcher:
+    replace(watcher,
+        "from . import config, store",
+        "from . import config, store, retry_guard",
+        "watcher import")
+    replace(watcher,
+        '            job = self.jobs.claim_auto()',
+        '''            # Never retry failed Apple signing automatically.
             if retry_guard.status().get("blocked"):
                 with self.lock:
                     self.queue.clear()
                 self.schedule()
                 continue
             job = self.jobs.claim_auto()''',
-    "watcher safety")
+        "watcher safety")
 jobs = pkg / "jobs.py"
 replace(jobs,
     '    job.rc = os.waitstatus_to_exitcode(status)\n    if job.partial.strip():\n        job.say("")',
