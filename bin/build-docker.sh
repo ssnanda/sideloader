@@ -105,6 +105,11 @@ if [[ "$RESET_USER" == true ]]; then credential_args+=(--reset); fi
 IFS=$'\t' read -r SIDELOADER_USER NEW_LOGIN_PASSWORD < <(
   python3 "$ROOT_DIR/overlay/local_credentials.py" "$UPSTREAM/data/ui.json" "${credential_args[@]}"
 )
+if [[ -n "$NEW_LOGIN_PASSWORD" ]]; then
+  printf '\nNew SideLoader login (shown once - save it now):\n'
+  printf '  Username: %s\n' "$SIDELOADER_USER"
+  printf '  Password: %s\n\n' "$NEW_LOGIN_PASSWORD"
+fi
 python3 "$ROOT_DIR/overlay/patch-upstream.py" "$UPSTREAM" "$ROOT_DIR/overlay"
 python3 "$ROOT_DIR/overlay/patch-v2.py" "$UPSTREAM" "$ROOT_DIR/overlay"
 python3 "$ROOT_DIR/overlay/patch-navigation.py" "$UPSTREAM" "$ROOT_DIR/overlay"
@@ -162,9 +167,6 @@ printf '\nSideLoader version: %s\n' "$(cat "$ROOT_DIR/VERSION")"
 printf 'Local build: %s\n' "$UPSTREAM"
 printf 'GitHub Actions: not used (local build).\n'
 printf 'Username: %s\n' "$SIDELOADER_USER"
-if [[ -n "$NEW_LOGIN_PASSWORD" ]]; then
-  printf 'Password: %s   (shown once - save it now)\n' "$NEW_LOGIN_PASSWORD"
-fi
 printf 'Reset: ./bin/build-docker.sh --reset-user\n'
 if [[ "$START" == true ]]; then
   printf 'Dashboard: http://localhost:38080\n'

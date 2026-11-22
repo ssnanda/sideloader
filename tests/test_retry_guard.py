@@ -36,6 +36,12 @@ class RetryGuardTests(unittest.TestCase):
         self.assertIn("'sideloader-resume' in page", patcher)
         self.assertIn("'S.signing_guard.message' in page", patcher)
 
+    def test_repeat_build_recognizes_newer_install_verification_wait(self):
+        patcher = (Path(__file__).resolve().parents[1] / "overlay" / "patch-retry-guard.py").read_text()
+        self.assertIn("patch-one-attempt.py later upgrades this block", patcher)
+        self.assertIn("if (( rc == 0 )) && verify_completed_install; then", patcher)
+        self.assertIn("unrecognized existing STAGE 4 block", patcher)
+
     def test_locked_account_blocks_new_invocation(self):
         token = guard.begin()
         outcome = guard.failed("This Apple Account has been locked for security reasons. (-20209)", 1, token)

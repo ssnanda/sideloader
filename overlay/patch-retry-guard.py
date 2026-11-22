@@ -93,11 +93,25 @@ log "STAGE 2/4: iPhone reachable and IPA ready. Preparing Apple developer signin
 log "STAGE 3/4: Asking AltServer to sign and install. One 2FA code may be required."
 log "signing and installing $(basename "$IPA_PATH") on $DEVICE_UDID"''',
     "signing stages")
-replace(shell,
-    'if (( rc == 0 )) && [[ "$(app_state)" == installed ]] && stamp_success; then',
-    'log "STAGE 4/4: AltServer exited $rc; checking the installed app and provisioning profile."\n'
-    'if (( rc == 0 )) && [[ "$(app_state)" == installed ]] && stamp_success; then',
-    "installation verification")
+# patch-one-attempt.py later upgrades this block to retry only the local iOS
+# inventory/profile checks. A repeat build must accept that newer form instead
+# of demanding the original one-line condition again.
+_shell_text = shell.read_text()
+stage_four = 'log "STAGE 4/4:'
+if stage_four not in _shell_text:
+  replace(shell,
+      'if (( rc == 0 )) && [[ "$(app_state)" == installed ]] && stamp_success; then',
+      'log "STAGE 4/4: AltServer exited $rc; checking the installed app and provisioning profile."\n'
+      'if (( rc == 0 )) && [[ "$(app_state)" == installed ]] && stamp_success; then',
+      "installation verification")
+else:
+  supported_verification = (
+      'if (( rc == 0 )) && [[ "$(app_state)" == installed ]] && stamp_success; then'
+      in _shell_text
+      or 'if (( rc == 0 )) && verify_completed_install; then' in _shell_text
+  )
+  if _shell_text.count(stage_four) != 1 or not supported_verification:
+    sys.exit("Signing safety patch installation verification: unrecognized existing STAGE 4 block")
 if 'python3 -m sideloop.retry_guard failed "$out"' not in _shell_text:
   replace(shell,
     'n=$(( $(read_fails) + 1 )); echo "$n" > "$FAILS"',
