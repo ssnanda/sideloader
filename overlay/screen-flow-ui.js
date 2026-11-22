@@ -1,12 +1,12 @@
 /* SideLoader screen workflow v1: actions replace Apps screen, never open a modal. */
-let slFlow=null, slFlowError="", slFlowBusy=false, slOtpWasVisible=false;
+let slFlow=null, slFlowError="", slFlowBusy=false, slOtpWasVisible=false, slRailOpen=false;
 
 function slScreen(mode,data={}) {
   slFlow={...data,mode}; slFlowError=""; slOtpWasVisible=false;
-  view=data.screenView==="activity"?"activity":"apps"; history.replaceState(null,"","#"+view);
-  lastPage=null; render(); window.scrollTo({top:0,behavior:"smooth"});
+  view="apps"; slRailOpen=true; history.replaceState(null,"","#apps");
+  lastPage=null; render();
 }
-function slHome(){slFlow=null;slFlowError="";slOtpWasVisible=false;lastPage=null;render();if(view==="activity")loadLogs();}
+function slHome(){slFlow=null;slFlowError="";slOtpWasVisible=false;lastPage=null;render();loadLogs();}
 function slMessage(title,message){slScreen("message",{title,message});}
 function slInstall(app,udid,installed=false){
   if(!app||!udid)return slMessage("Select an iPhone","Choose an iPhone and an app first.");
@@ -109,6 +109,13 @@ function slScreenView(){
     '<div class="sl-screen-body">'+body+(slFlowError?'<p class="sl-screen-error" role="alert">'+esc(slFlowError)+'</p>':"")+
     '<div class="sl-screen-actions">'+buttons+'</div></div></section>';
 }
+function slActivityRail(){
+  const content=slFlow?slScreenView():activityView();
+  return '<aside class="sl-activity-rail '+(slRailOpen?'open':'')+'" id="sl-activity-rail" aria-label="Activity">'+
+    '<button type="button" class="sl-rail-tab" id="sl-rail-toggle" aria-expanded="'+slRailOpen+'" aria-controls="sl-rail-panel">'+
+    '<span class="sl-rail-icon" aria-hidden="true">↻</span><span>Activity</span></button>'+
+    '<div class="sl-rail-panel" id="sl-rail-panel">'+content+'</div></aside>';
+}
 async function slStartJob(path,payload={}){
   if(slFlowBusy)return;
   slFlowBusy=true;
@@ -201,6 +208,9 @@ function slWireScreen(){
     try{await api("/api/job/cancel",{json:{}});await poll();}
     catch(e){slFlowError=e.message;render();}
   });
+  on("sl-rail-toggle","onclick",()=>{slRailOpen=!slRailOpen;lastPage=null;render();if(slRailOpen)loadLogs();});
+  const rail=document.getElementById("sl-activity-rail");
+  if(rail)rail.onmouseenter=()=>{if(!slFlow)loadLogs();};
   // Older Step 3 install buttons use data-sign (not the Apps manager
   // data-device-app-action handler). Both must show the same confirmation
   // screen before a single Apple authentication request is permitted.

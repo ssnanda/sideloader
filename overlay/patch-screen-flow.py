@@ -36,19 +36,24 @@ replace_once(
     "disable signing modal"
 )
 
-# Keep the Apps tab visible but switch its content to an entire new screen
-# for confirmations, progress, code entry, failure and completion.
-activity_route = ('view === "apps" ? (slFlow ? slScreenView() : appsView()) '
-                  ': (slFlow?.screenView === "activity" ? slScreenView() : activityView())')
-# Migrate an already locally patched dashboard without requiring a reset.
-page = page.replace(
+# Keep Apps visible while confirmations, progress, code entry and history live
+# in an expanding Activity rail.
+activity_route = 'appsView() + slActivityRail()'
+old_routes = [
+    'view === "apps" ? (slFlow ? slScreenView() : appsView()) : (slFlow?.screenView === "activity" ? slScreenView() : activityView())',
     'view === "apps" ? (slFlow ? slScreenView() : appsView()) : activityView()',
-    activity_route
-)
-replace_once(
     'view === "apps" ? appsView() : activityView()',
-    activity_route,
-    "screen navigation"
+]
+if activity_route not in page:
+    matches = [route for route in old_routes if page.count(route) == 1]
+    if len(matches) != 1:
+        sys.exit(f"Screen flow patch screen navigation: expected one anchor, got {len(matches)}")
+    page = page.replace(matches[0], activity_route, 1)
+
+# Activity is now the side rail, not a separate bottom navigation page.
+page = page.replace(
+    'const TABS = [["apps", "Apps", "apps"], ["sources", "Sources", "list"], ["activity", "Activity", "time-outline"]];',
+    'const TABS = [["apps", "Apps", "apps"], ["sources", "Sources", "list"]];'
 )
 
 # The existing job launcher was changed by the Apps dashboard overlay. Route
@@ -79,7 +84,7 @@ replace_once(
     if (S.job?.running && S.job.needs_input && S.job.accepts_input &&
         S.job.kind === "refresh" && (!slFlow || slFlow.mode !== "job")) {
       slFlow = {mode:"job",jobId:S.job.id,title:S.job.title||"Apple verification"};
-      view = "apps";
+      view = "apps"; slRailOpen = true;
       history.replaceState(null,"","#apps");
       lastPage = null;
     }''',
@@ -109,8 +114,18 @@ if restore not in boot:
     page = page[:boot_start] + boot + page[boot_end:]
 
 css = (overlay / "screen-flow.css").read_text()
-if "/* SideLoader in-page workflow v1" not in page:
+css_marker = "/* SideLoader in-page workflow v1"
+if css_marker not in page:
     replace_once("</style>", "\n" + css + "\n</style>", "inline workflow styles")
+else:
+    css_start = page.index(css_marker)
+    media_start = page.find("@media(max-width:", css_start)
+    css_end = page.find("\n", media_start)
+    if media_start < 0:
+        sys.exit("Screen flow patch: cannot locate existing workflow CSS end")
+    if css_end < 0:
+        css_end = len(page)
+    page = page[:css_start] + css + page[css_end:]
 
 # All insertion requirements validated before touching disk.
 index.write_text(page)

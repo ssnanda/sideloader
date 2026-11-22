@@ -280,7 +280,7 @@ class DashboardPatchTests(unittest.TestCase):
         sources=(ROOT/'overlay'/'sources.html').read_text()
         self.assertIn("screen-flow-ui.js",patcher)
         self.assertIn("wire_start =",patcher)
-        self.assertIn("slScreenView() : appsView()",screen)
+        self.assertIn("slActivityRail()",screen)
         self.assertIn("slWireScreen();",screen)
         self.assertIn("sourceConfirm(",sources)
         self.assertNotIn("install_now:true",sources)

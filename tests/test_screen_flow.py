@@ -1,4 +1,4 @@
-"""Regression coverage for full-screen Apps prompts and repeat Docker builds."""
+"""Regression coverage for the Activity rail and repeat Docker builds."""
 from pathlib import Path
 import subprocess
 import sys
@@ -55,12 +55,12 @@ class ScreenFlowTests(unittest.TestCase):
             result = self.run_patch(root)
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             first = index.read_text()
-            self.assertIn("slScreenView() : appsView()", first)
+            self.assertIn("appsView() + slActivityRail()", first)
             self.assertIn("slWireScreen();", first)
             self.assertIn("return slStartJob(path, body);", first)
             self.assertIn("legacy modal intentionally disabled", first)
             self.assertIn("S.job.needs_input", first)
-            self.assertIn("/* SideLoader in-page workflow v1", first)
+            self.assertIn("expanding Activity rail", first)
             result = self.run_patch(root)
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             self.assertEqual(first, index.read_text())
@@ -106,13 +106,15 @@ class ScreenFlowTests(unittest.TestCase):
         self.assertIn('slInstall(app,udid,installed);', flow)
         self.assertIn('on("signall","onclick"', flow)
         self.assertIn('on("sideloader-clear-logs","onclick"', flow)
+        self.assertIn('function slActivityRail()', flow)
+        self.assertIn('slRailOpen=true', flow)
         self.assertIn('sourceConfirm(', sources)
 
     def test_polling_exposes_challenge_without_waiting_for_activity(self):
         patch=(ROOT/"overlay"/"patch-screen-flow.py").read_text()
         self.assertIn("S.job?.needs_input ? 500 : 800", patch)
         self.assertIn('S.job.needs_input && S.job.accepts_input', patch)
-        self.assertIn('view = "apps"', patch)
+        self.assertIn('view = "apps"; slRailOpen = true', patch)
         self.assertIn('slFlow = {mode:"job",jobId:S.job.id', patch)
 
     def test_javascript_syntax(self):

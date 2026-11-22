@@ -137,6 +137,8 @@ python3 -m sideloop.retry_guard failed "$out" "$rc" || true
             self.assertLess(once.index('retry_guard begin'), once.index('timeout 2400'))
             self.assertIn('retry_guard success "$attempt_token"', once)
             self.assertIn('failed "$out" "$rc" "$attempt_token"', once)
+            # Minimal legacy fixtures do not have app_state; the production
+            # migration adds the wait only when its verification anchor exists.
             run = subprocess.run(cmd, capture_output=True, text=True)
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
             self.assertEqual(once, shell.read_text())
@@ -152,6 +154,12 @@ python3 -m sideloop.retry_guard failed "$out" "$rc" || true
             result = subprocess.run([sys.executable, str(self.SCRIPT), d], capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(shell.read_text(), 'unexpected file')
+
+    def test_production_verification_waits_for_ios_inventory(self):
+        source = self.SCRIPT.read_text()
+        self.assertIn('for attempt in {1..15}', source)
+        self.assertIn('sleep 2', source)
+        self.assertIn('waiting for iOS to confirm', source)
 
 
 if __name__ == '__main__':

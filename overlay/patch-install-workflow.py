@@ -114,7 +114,7 @@ optional = (
     '\n  <div class="sect renewal-settings">'
     '\n    <div class="shead"><h3>Automatic renewal</h3></div>\n'
     + renewal_controls +
-    '\n    <div class="foot">Automatic renewal is a preference, not a setup step. '
+    '\n    <div class="foot">Automatically re-signs every installed app with less than 6 hours remaining. '
     'Enable it after the first successful manual install. Signing pauses on a failed attempt.</div>'
     '\n  </div>'
 )
