@@ -42,6 +42,12 @@ class RetryGuardTests(unittest.TestCase):
         self.assertIn("if (( rc == 0 )) && verify_completed_install; then", patcher)
         self.assertIn("unrecognized existing STAGE 4 block", patcher)
 
+    def test_repeat_build_normalizes_guard_before_remote_signing_branch(self):
+        patcher = (Path(__file__).resolve().parents[1] / "overlay" / "patch-retry-guard.py").read_text()
+        self.assertIn("Keep the guard at the method boundary", patcher)
+        self.assertIn("refresh_block.count(guard_line)", patcher)
+        self.assertIn("refresh_start + guard_line", patcher)
+
     def test_locked_account_blocks_new_invocation(self):
         token = guard.begin()
         outcome = guard.failed("This Apple Account has been locked for security reasons. (-20209)", 1, token)

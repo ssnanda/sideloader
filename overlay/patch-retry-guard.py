@@ -27,10 +27,30 @@ replace(server,
     '            "job": self.jobs.current.view() if self.jobs.current else None,\n'
     '            "signing_guard": retry_guard.status(),',
     "server state")
-replace(server,
-    '    def refresh(self, data):\n        if not configured():',
-    '    def refresh(self, data):\n        retry_guard.assert_allowed()\n        if not configured():',
-    "manual install preflight")
+
+# Keep the guard at the method boundary so every signing backend is covered.
+# The remote-server overlay runs later and inserts its branch immediately after
+# this definition. On a persistent checkout that newer branch is already here,
+# so the original adjacent ``if not configured()`` anchor no longer exists.
+server_source = server.read_text()
+refresh_start = '    def refresh(self, data):\n'
+if server_source.count(refresh_start) != 1:
+    sys.exit(f"Signing safety patch manual install preflight: expected 1 refresh method, got {server_source.count(refresh_start)}")
+start = server_source.index(refresh_start)
+end = server_source.find('\n    def ', start + len(refresh_start))
+if end < 0:
+    end = len(server_source)
+refresh_block = server_source[start:end]
+guard_line = '        retry_guard.assert_allowed()\n'
+guard_count = refresh_block.count(guard_line)
+if guard_count > 1:
+    sys.exit(f"Signing safety patch manual install preflight: expected at most 1 guard, got {guard_count}")
+if guard_count == 1:
+    refresh_block = refresh_block.replace(guard_line, '', 1)
+elif '        if not configured():\n' not in refresh_block:
+    sys.exit("Signing safety patch manual install preflight: no recognized insertion anchor")
+refresh_block = refresh_block.replace(refresh_start, refresh_start + guard_line, 1)
+server.write_text(server_source[:start] + refresh_block + server_source[end:])
 replace(server,
     '    def recheck(self, data):',
     '    def signing_resume(self, data):\n'
