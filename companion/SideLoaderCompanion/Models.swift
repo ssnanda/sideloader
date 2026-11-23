@@ -4,6 +4,30 @@ struct ServerState: Decodable {
     let now: Int
     let apps: [ManagedApp]
     let registered: [RegisteredDevice]
+    let remoteServer: RemoteServer?
+
+    enum CodingKeys: String, CodingKey {
+        case now, apps, registered
+        case remoteServer = "remote_server"
+    }
+}
+
+struct RemoteServer: Decodable {
+    let enabled: Bool
+    let reachable: Bool?
+    let paired: Bool?
+    let accountReady: Bool?
+    let profiles: [RemoteProfile]?
+
+    enum CodingKeys: String, CodingKey {
+        case enabled, reachable, paired, profiles
+        case accountReady = "account_ready"
+    }
+}
+
+struct RemoteProfile: Decodable {
+    let bundle: String
+    let expires: Int?
 }
 
 struct RegisteredDevice: Decodable, Identifiable, Hashable {
