@@ -123,6 +123,34 @@ if (( rc == 0 )) && stamp_success; then
 fi
 python3 -m sideloop.retry_guard failed "$out" "$rc" || true
 '''
+    PRIOR_WAIT_FIXTURE = '''#!/usr/bin/env bash
+log "STAGE 1/4: Checking signing safety lock. No Apple request has been sent."
+if ! python3 -m sideloop.retry_guard check; then exit 73; fi
+log "STAGE 2/4: iPhone reachable and IPA ready. Preparing Apple developer signing."
+log "STAGE 3/4: Asking AltServer to sign and install. One 2FA code may be required."
+log "signing and installing app.ipa on $DEVICE_UDID"
+out="$(mktemp)"
+if ! attempt_token="$(python3 -m sideloop.retry_guard begin)"; then exit 73; fi
+timeout 2400 "$ALTSERVER_BIN" "$IPA_PATH"
+verify_completed_install() {
+  local attempt
+  for attempt in {1..15}; do
+    if [[ "$(app_state)" == installed ]] && stamp_success; then return 0; fi
+    (( attempt < 15 )) && sleep 2
+  done
+  return 1
+}
+
+log "STAGE 4/4: AltServer exited $rc; waiting for iOS to confirm the installed app and profile."
+if (( rc == 0 )) && verify_completed_install; then
+  msg="refreshed, valid until now"
+  log "OK $msg"; record ok "$msg"
+  python3 -m sideloop.retry_guard success "$attempt_token"
+  python3 -m sideloop.account verified
+  exit 0
+fi
+python3 -m sideloop.retry_guard failed "$out" "$rc" "$attempt_token" || true
+'''
 
     def test_patch_reservation_is_before_altserver_and_idempotent(self):
         with tempfile.TemporaryDirectory() as d:
@@ -154,6 +182,23 @@ python3 -m sideloop.retry_guard failed "$out" "$rc" || true
             result = subprocess.run([sys.executable, str(self.SCRIPT), d], capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(shell.read_text(), 'unexpected file')
+
+    def test_migrates_prior_polling_block_to_timed_form(self):
+        with tempfile.TemporaryDirectory() as d:
+            scripts = Path(d) / 'scripts'
+            scripts.mkdir()
+            shell = scripts / 'refresh.sh'
+            shell.write_text(self.PRIOR_WAIT_FIXTURE)
+            cmd = [sys.executable, str(self.SCRIPT), d]
+            first = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            migrated = shell.read_text()
+            self.assertEqual(migrated.count('verify_completed_install()'), 1)
+            self.assertIn('ALTSERVER_DONE="$(now)"', migrated)
+            self.assertIn('Installation verified after', migrated)
+            again = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+            self.assertEqual(migrated, shell.read_text())
 
     def test_production_verification_waits_for_ios_inventory(self):
         source = self.SCRIPT.read_text()

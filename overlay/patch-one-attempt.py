@@ -89,6 +89,17 @@ if TOKENED in source:
 # install failure; this does not contact Apple or launch AltServer again.
 old_result = '''log "STAGE 4/4: AltServer exited $rc; checking the installed app and provisioning profile."
 if (( rc == 0 )) && [[ "$(app_state)" == installed ]] && stamp_success; then'''
+prior_wait_result = '''verify_completed_install() {
+  local attempt
+  for attempt in {1..15}; do
+    if [[ "$(app_state)" == installed ]] && stamp_success; then return 0; fi
+    (( attempt < 15 )) && sleep 2
+  done
+  return 1
+}
+
+log "STAGE 4/4: AltServer exited $rc; waiting for iOS to confirm the installed app and profile."
+if (( rc == 0 )) && verify_completed_install; then'''
 new_result = '''verify_completed_install() {
   local attempt
   for attempt in {1..15}; do
@@ -104,8 +115,13 @@ if (( rc == 0 )) && verify_completed_install; then'''
 if 'ALTSERVER_DONE="$(now)"' not in source:
     if source.count(old_result) == 1:
         source = source.replace(old_result, new_result, 1)
+    elif source.count(prior_wait_result) == 1:
+        # Releases before phase timing already had safe local polling. Replace
+        # that complete historical block so persistent checkouts converge on
+        # the canonical timed form without duplicating the helper function.
+        source = source.replace(prior_wait_result, new_result, 1)
     elif 'STAGE 4/4:' in source:
-        sys.exit(f"Single-attempt patch verification wait: expected 1 anchor, got {source.count(old_result)}")
+        sys.exit("Single-attempt patch verification wait: unrecognized Stage 4 block")
 
 timing_anchor = 'if (( rc == 0 )) && verify_completed_install; then\n  msg="refreshed, valid until'
 timed_anchor = ('if (( rc == 0 )) && verify_completed_install; then\n'
