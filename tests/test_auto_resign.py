@@ -23,6 +23,15 @@ class AutoResignTests(unittest.TestCase):
         self.assertIn("S.config.renew_before_days * 86400", patch)
         self.assertIn("6 * 60 * 60", patch)
 
+    def test_bulk_resign_preserves_removed_app_policy(self):
+        patch = (ROOT / "overlay" / "patch-auto-resign.py").read_text()
+        self.assertIn("--bulk) BULK=1", patch)
+        self.assertIn("bulk_forward", patch)
+        self.assertIn("bulk re-sign never reinstalls a removed app", patch)
+        self.assertIn("bulk re-sign skipped", patch)
+        self.assertIn("AUTO || BULK", patch)
+        self.assertIn('FORCE=1', patch)  # Explicit single-app installation remains supported.
+
     def test_build_installs_canonical_scheduler_after_safety_patches(self):
         build = (ROOT / "bin" / "build-docker.sh").read_text()
         self.assertLess(build.index("patch-apple-2fa-safety.py"),
