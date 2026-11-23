@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import socket
 import threading
 import time
@@ -334,6 +335,12 @@ def latest_job(job, udid, app_id, bundle, sources, source_id=None):
         def refresh(self, _data):
             raise RuntimeError("Remote import cannot launch local AltServer signing")
 
+    from . import config
+    saved = config.APPS / app_id / "app.ipa"
+    if not saved.is_file():
+        raise ValueError("Saved IPA no longer exists; reinstall latest refused")
+    # Keep the previous IPA if the replacement download or Apple signing fails.
+    shutil.copy2(saved, config.APPS / app_id / "previous.ipa")
     job.say("Downloading the current IPA from saved source " + str(source.get("name", "source"))[:80])
     result = sources.install(
         {"source": source["id"], "bundleIdentifier": bundle, "install_now": False},
