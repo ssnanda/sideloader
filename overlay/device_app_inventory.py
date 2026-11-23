@@ -61,9 +61,10 @@ def parse_apps(data):
             continue
         name = row.get('CFBundleDisplayName') or row.get('CFBundleName') or bundle
         version = row.get('CFBundleShortVersionString') or ''
+        build = row.get('CFBundleVersion') or ''
         found[bundle] = {'bundle_id': bundle, 'name': str(name)[:160],
-                         'version': str(version)[:64], 'origin': _origin(row),
-                         'installed': True}
+                         'version': str(version)[:64], 'build': str(build)[:64],
+                         'origin': _origin(row), 'installed': True}
     return sorted(found.values(), key=lambda x: (x['name'].lower(), x['bundle_id']))
 
 
