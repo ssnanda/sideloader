@@ -26,6 +26,14 @@ def apply(checkout, overlay):
     if "    def refresh(self, data):" not in source:
         return
 
+    if "remote_altkeeper.bootstrap_device()" not in source:
+        anchor = "        self.jobs, self.health, self.muxers = jobs, health, muxers"
+        if source.count(anchor) != 1:
+            raise SystemExit("Remote adapter cannot identify SideLoader startup")
+        source = source.replace(
+            anchor, anchor + "\n        remote_altkeeper.bootstrap_device()", 1
+        )
+
     source = _insert_once(
         source,
         "from .installed import enrich_apps",
@@ -116,6 +124,29 @@ def apply(checkout, overlay):
         if self.fd is None:'''
     jobs = _insert_once(jobs, send_anchor, send_remote, "remote code forwarding")
     jobs_file.write_text(jobs)
+
+    # The legacy SideLoader watcher operates through usbmuxd. In remote mode
+    # AltKeeper owns any scheduled renewals; never let the old watcher start
+    # competing Apple sign-ins against an unreachable legacy device channel.
+    watcher_file = package / "watcher.py"
+    watcher = watcher_file.read_text()
+    if "from . import remote_altkeeper" not in watcher:
+        anchor = "from . import config, retry_guard, store"
+        if watcher.count(anchor) != 1:
+            raise SystemExit("Remote adapter cannot locate the legacy watcher imports")
+        watcher = watcher.replace(anchor, anchor + "\nfrom . import remote_altkeeper", 1)
+    if "if remote_altkeeper.enabled():" not in watcher:
+        anchor = "        while True:\n            time.sleep(5)"
+        if watcher.count(anchor) != 1:
+            raise SystemExit("Remote adapter cannot locate the legacy watcher loop")
+        watcher = watcher.replace(
+            anchor,
+            "        while True:\n            if remote_altkeeper.enabled():\n"
+            "                time.sleep(60)\n                continue\n"
+            "            time.sleep(5)",
+            1
+        )
+    watcher_file.write_text(watcher)
     print("Optional remote AltKeeper bridge installed (inactive without environment opt-in).")
 
 
