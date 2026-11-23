@@ -23,6 +23,15 @@
       "versions": [
         {
           "version": "1.0",
+          "buildVersion": "71",
+          "date": "2026-11-23",
+          "localizedDescription": "Verified installed-app list, live refresh, individual per-app re-signing with status and Apple verification-code entry.",
+          "downloadURL": "https://github.com/ssnanda/sideloader/releases/download/v0.2.26/sideloader-companion.ipa",
+          "size": 165860,
+          "minOSVersion": "17.0"
+        },
+        {
+          "version": "1.0",
           "buildVersion": "69",
           "date": "2026-11-23",
           "localizedDescription": "Verified installed-app list, live refresh, individual per-app re-signing with status and Apple verification-code entry.",
