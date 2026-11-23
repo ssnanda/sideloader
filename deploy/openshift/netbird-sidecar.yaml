@@ -1,0 +1,22 @@
+# Requires the NetBird Kubernetes Operator and an OpenShift security policy
+# permitting its VPN sidecar to create a tunnel. Apply only to a private
+# project with the operator configured and NetBird ACLs limited to this iPhone.
+# Never create a public OpenShift Route for the AltKeeper listener.
+apiVersion: netbird.io/v1alpha1
+kind: SetupKey
+metadata:
+  name: sideloader-remote-vpn
+spec:
+  name: sideloader-remote-vpn
+  ephemeral: false
+---
+apiVersion: netbird.io/v1alpha1
+kind: SidecarProfile
+metadata:
+  name: sideloader-remote-vpn
+spec:
+  setupKeyRef:
+    name: sideloader-remote-vpn
+  podSelector:
+    matchLabels:
+      app: sideloader-remote
