@@ -1,0 +1,147 @@
+# SideLoader RemotePairing test deployment.
+# Supply an image built from SideLoader's patched Docker source and a separately
+# built AltKeeper image. Neither image reference below is a published image.
+# DO NOT publish an OpenShift Route for these HTTP listeners. Use NetBird.
+# Set up the NetBird operator's SidecarProfile separately (netbird-sidecar.yaml).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sideloader-remote-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sideloader-altkeeper-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 4Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sideloader-remote
+  labels:
+    app: sideloader-remote
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sideloader-remote
+  template:
+    metadata:
+      labels:
+        app: sideloader-remote
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sideloader
+          image: registry.example.com/replace-with-your-patched-sideloader-image:0.2.27
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-m", "sideloop"]
+          ports:
+            - name: dashboard
+              containerPort: 38080
+              protocol: TCP
+          env:
+            - name: DATA_DIR
+              value: /data
+            - name: MUX
+              value: external
+            - name: UI_PORT
+              value: "38080"
+            - name: SIDELOADER_REMOTE_ALTKEEPER_URL
+              value: http://127.0.0.1:8787
+            - name: SIDELOADER_REMOTE_ALTKEEPER_PIN
+              valueFrom:
+                secretKeyRef:
+                  name: sideloader-remote-auth
+                  key: altkeeper-pin
+            - name: SIDELOADER_REMOTE_UDID
+              valueFrom:
+                secretKeyRef:
+                  name: sideloader-remote-auth
+                  key: iphone-udid
+            - name: SIDELOADER_REMOTE_PHONE
+              valueFrom:
+                secretKeyRef:
+                  name: sideloader-remote-auth
+                  key: iphone-netbird-address
+            - name: SIDELOADER_REMOTE_DEVICE_NAME
+              value: My remote iPhone
+            - name: ANISETTE_SERVER
+              value: https://new.ani.sidestore.io
+          volumeMounts:
+            - name: sideloader-data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: dashboard
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+        - name: altkeeper
+          image: registry.example.com/replace-with-your-altkeeper-image:latest
+          imagePullPolicy: IfNotPresent
+          # AltKeeper's original Dockerfile sets ENTRYPOINT ["altkeeper"].
+          args: ["serve", "--bind", "127.0.0.1:8787"]
+          env:
+            - name: ALTKEEPER_WEB_PIN
+              valueFrom:
+                secretKeyRef:
+                  name: sideloader-remote-auth
+                  key: altkeeper-pin
+            - name: ALTKEEPER_PHONE
+              valueFrom:
+                secretKeyRef:
+                  name: sideloader-remote-auth
+                  key: iphone-netbird-address
+            - name: ALTKEEPER_NO_USB
+              value: "1"
+            - name: ALTKEEPER_NO_AUTO_PAIR
+              value: "1"
+          workingDir: /data
+          volumeMounts:
+            - name: altkeeper-data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+      volumes:
+        - name: sideloader-data
+          persistentVolumeClaim:
+            claimName: sideloader-remote-data
+        - name: altkeeper-data
+          persistentVolumeClaim:
+            claimName: sideloader-altkeeper-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sideloader-remote
+spec:
+  type: ClusterIP
+  selector:
+    app: sideloader-remote
+  ports:
+    - name: dashboard
+      port: 38080
+      targetPort: dashboard
+      protocol: TCP
