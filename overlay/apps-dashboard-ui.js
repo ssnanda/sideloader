@@ -137,6 +137,22 @@ function signingExpiryText(target, scannedExpiry=0) {
   })}`;
 }
 
+function slReleaseDate(value) {
+  if (!value) return "";
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? value + "T00:00:00" : value);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString([], {
+    month:"short", day:"numeric", year:"numeric"
+  });
+}
+
+function slVersionRelease(version, date) {
+  const parts = [];
+  if (version) parts.push(`Version ${version}`);
+  const released = slReleaseDate(date);
+  if (released) parts.push(`Released ${released}`);
+  return parts.join(" · ");
+}
+
 function sideLoaderAppIdSummary(rows) {
   const tracked = rows.reduce((count, row) => {
     const app = row.managed || row.relatedManaged;
@@ -209,7 +225,7 @@ function remoteAppsManager() {
       const hasProfile = slRemoteProfile(app);
       return '<div class="sl-app-entry" data-bundle="' + esc(app.bundle_id) + '">' +
         '<span class="sl-app-detail"><b>' + esc(app.name) + '</b><small>' +
-        esc(app.version) + ' · ' + esc(app.bundle_id) + '</small><small>' +
+        esc(slVersionRelease(app.version, source?.date)) + '</small><small>' +
         (hasProfile ? "Remote provisioning profile found; installation not independently confirmed" :
           "No matching remote provisioning profile confirmed") +
         '</small></span><span class="sl-app-actions">' +
@@ -273,7 +289,7 @@ function deviceAppsManager() {
           `data-source-app="${esc(app.bundleIdentifier)}"`;
         return `<div class="sl-app-entry">
           <span class="sl-app-detail"><b>${esc(app.name)}</b>
-            <small>${esc(app.version)} · ${esc(app.source_name)}</small>
+            <small>${esc(slVersionRelease(app.version, app.date))}</small>
           </span>
           <button type="button" class="cap" ${action}
             ${sourceCatalogBusy||busy?"disabled":""}>${label}</button>
@@ -284,7 +300,8 @@ function deviceAppsManager() {
     <div class="sl-add-heading"><b>Imported IPAs</b><button type="button" class="cap" id="sideloader-import-ipa">Import IPA</button></div>
     ${(S.apps || []).map(app => {
       const installed = rows.some(row => deviceBundleMatches(row.bundle_id, app.bundle_id) || row.relatedManaged?.id === app.id);
-      return `<div class="sl-app-entry"><span class="sl-app-detail"><b>${esc(app.name)}</b><small>${esc(app.version)} · ${esc(app.bundle_id)}</small></span>
+      const source = sourceCatalog.find(item => item.bundleIdentifier === app.bundle_id && item.version === app.version);
+      return `<div class="sl-app-entry"><span class="sl-app-detail"><b>${esc(app.name)}</b><small>${esc(slVersionRelease(app.version, source?.date))}</small></span>
         <button type="button" class="cap" data-imported-app="${esc(app.id)}" ${busy?"disabled":""}>${installed?"Re-sign":"Install"}</button>
         ${importedIpaRemoveButton(app)}</div>`;
     }).join("") || '<div class="foot">No imported IPA files.</div>'}
@@ -312,11 +329,11 @@ function deviceAppsManager() {
       const latestSource = slLatestSource(row);
       const deviceSigning = signingDaysLeft(target, row.signing_expiry);
       const expiryText = signingExpiryText(target, row.signing_expiry);
-      const subtitle = row.relatedManaged ? `Saved IPA uses different bundle ID ${row.relatedManaged.bundle_id}` : row.bundle_id;
+      const release = slVersionRelease(row.version, latestSource?.version === row.version ? latestSource.date : row.sourceMatch?.date);
       return `<div class="sl-app-entry" data-bundle="${esc(row.bundle_id)}">
-        <span class="sl-app-detail"><span class="sl-installed-main"><b>${esc(row.name)}</b><strong class="sl-signing-days">${esc(deviceSigning)}</strong></span><small>${esc(expiryText)} · ${esc(subtitle)}${row.version?" · "+esc(row.version):""}</small>
-          ${update ? `<small class="sl-app-update-hint">New version: ${esc(row.version)} → ${esc(update.version)} · ${esc(update.source_name)}</small>` :
-            latestSource ? `<small class="sl-app-source-hint">Latest from ${esc(latestSource.source_name)}: ${esc(latestSource.version || "version unspecified")}</small>` : ""}
+        <span class="sl-app-detail"><span class="sl-installed-main"><b>${esc(row.name)}</b><strong class="sl-signing-days">${esc(deviceSigning)}</strong></span><small>${esc(expiryText)}${release?" · "+esc(release):""}</small>
+          ${update ? `<small class="sl-app-update-hint">Update: ${esc(slVersionRelease(update.version, update.date))}</small>` :
+            latestSource ? `<small class="sl-app-source-hint">Latest: ${esc(slVersionRelease(latestSource.version, latestSource.date) || "Version unspecified")}</small>` : ""}
         </span>
         <span class="sl-app-actions">
           <button type="button" class="cap ${row.installed?"":"solid"}" ${row.sourceMatch&&!row.managed?`data-device-source-action="${esc(row.sourceMatch.bundleIdentifier)}"`:`data-device-app-action="${esc(row.managed?.bundle_id || row.bundle_id)}"`} ${disabled?"disabled":""}>${button}</button>

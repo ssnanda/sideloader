@@ -297,6 +297,15 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertNotIn("installed?'Update':'Install'",sources)
         self.assertNotIn("install_now:true",sources)
 
+    def test_version_labels_show_release_dates_without_internal_metadata(self):
+        ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
+        self.assertIn('function slVersionRelease(version, date)', ui)
+        self.assertIn('Released ${released}', ui)
+        self.assertIn('slVersionRelease(app.version, app.date)', ui)
+        self.assertIn('slVersionRelease(update.version, update.date)', ui)
+        self.assertNotIn('${esc(app.version)} · ${esc(app.source_name)}', ui)
+        self.assertNotIn('${esc(app.version)} · ${esc(app.bundle_id)}', ui)
+
     def test_sources_only_manage_lists_and_apps_owns_installation(self):
         patcher=(ROOT/'overlay'/'patch-apps-dashboard.py').read_text()
         screen=(ROOT/'overlay'/'patch-screen-flow.py').read_text()

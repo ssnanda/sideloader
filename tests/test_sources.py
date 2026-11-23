@@ -40,8 +40,10 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(result["version"], "1.0")
 
     def test_versioned_altstore(self):
-        a = {"name": "Test", "bundleIdentifier": "com.example.app", "versions": [{"version": "2.0", "downloadURL": "https://example.com/two.ipa"}]}
-        self.assertEqual(mod._latest(a, "https://example.com/list.json")["version"], "2.0")
+        a = {"name": "Test", "bundleIdentifier": "com.example.app", "versions": [{"version": "2.0", "date": "2026-11-23", "downloadURL": "https://example.com/two.ipa"}]}
+        latest = mod._latest(a, "https://example.com/list.json")
+        self.assertEqual(latest["version"], "2.0")
+        self.assertEqual(latest["date"], "2026-11-23")
 
     def test_invalid_scheme_rejected(self):
         for url in ["file:///etc/passwd", "ftp://example.com/file.json", "http://127.0.0.1/private", "https://user:pass@example.com/a.json"]:

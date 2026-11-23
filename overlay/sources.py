@@ -131,6 +131,7 @@ def _latest(app, source_url):
         "bundleIdentifier": bundle_id,
         "version": str(version.get("version") or app.get("version") or ""),
         "buildVersion": str(version.get("buildVersion") or app.get("buildVersion") or ""),
+        "date": str(version.get("date") or app.get("date") or ""),
         "downloadURL": urllib.parse.urljoin(source_url, url),
     }
 
