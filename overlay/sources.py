@@ -109,8 +109,15 @@ def _latest(app, source_url):
     # AltStore Classic sources support either top-level downloadURL/version
     # or versions[] with per-version URLs (newer formats).
     versions = app.get("versions") or []
-    if versions and isinstance(versions, list):
-        version = next((v for v in versions if isinstance(v, dict) and v.get("downloadURL")), {})
+    if isinstance(versions, list) and versions:
+        available = [v for v in versions if isinstance(v, dict) and v.get("downloadURL")]
+        version = next(iter(available), {})
+        # AltStore normally publishes newest first, but some feeds do not.
+        # Choose the highest comparable version/build when it is available.
+        for candidate in available[1:]:
+            if version_is_newer(candidate.get("version"), version.get("version"),
+                                candidate.get("buildVersion"), version.get("buildVersion")):
+                version = candidate
     else:
         version = app
     url = version.get("downloadURL") or app.get("downloadURL")
@@ -213,21 +220,19 @@ class Sources:
             if not matches:
                 raise ValueError("app not found in current source")
             item = matches[0]
-            updating = data.get("update_existing") is True
-            installed_app = None
-            saved_app = None
-            if updating:
-                # Updates are explicitly requested for an app already confirmed
-                # on one registered phone; never reinstall a removed app here.
+            reinstalling = data.get("reinstall_latest") is True
+            if reinstalling:
+                # A requested reinstall must target an app already installed,
+                # never resurrect an app the user removed from the iPhone.
                 udid = store.resolve_device(data.get("device", ""))
                 if not udid:
-                    raise ValueError("select a registered iPhone before updating")
+                    raise ValueError("select a registered iPhone before reinstalling")
                 saved_id = re.sub(r"[^A-Za-z0-9._-]", "_", bundle_id)[:120]
                 if saved_id not in store.app_ids():
                     raise ValueError("import this app first; it is not a saved SideLoader IPA")
                 saved_app = store.app_view(saved_id)
                 if saved_app["bundle_id"] != bundle_id:
-                    raise ValueError("saved IPA bundle identifier does not match the update")
+                    raise ValueError("saved IPA bundle identifier does not match the source")
                 from . import device_app_inventory
                 scanned = device_app_inventory.inventory(udid)
                 installed_app = next(
@@ -235,25 +240,11 @@ class Sources:
                     None
                 )
                 if installed_app is None:
-                    raise ValueError("app is not installed on this iPhone; update refused")
-                if not version_is_newer(
-                    item["version"], installed_app.get("version", ""),
-                    item.get("buildVersion", ""), installed_app.get("build", "")
-                ):
-                    raise ValueError("source does not offer a verified newer app version")
-                # The newer IPA may already be imported. Re-use it instead of
-                # overwriting the same artifact and risking an unnecessary download.
-                cached = saved_app.get("info") or {}
-                if version_is_newer(
-                    saved_app["version"], installed_app.get("version", ""),
-                    cached.get("build", ""), installed_app.get("build", "")
-                ) and not version_is_newer(
-                    item["version"], saved_app["version"],
-                    item.get("buildVersion", ""), cached.get("build", "")
-                ):
-                    return {"ok": True, "app": item["name"], "app_id": saved_id,
-                            "version": saved_app["version"], "already_imported": True,
-                            "refresh": "not started"}
+                    raise ValueError("app is no longer installed on this iPhone; reinstall refused")
+                # Always download the newest IPA advertised by this saved source,
+                # even if its version is unchanged or cannot be compared.
+                # This also permits reinstalling a repaired build at the same
+                # version without reusing a stale saved IPA.
             # Stored IPA files are not active apps and do not consume Apple's
             # three-app device allowance until the user explicitly installs
             # them. Keep source browsing/import independent from that limit.
@@ -283,28 +274,21 @@ class Sources:
                 if actual != bundle_id:
                     raise ValueError(f"IPA bundle ID {actual} differs from source listing "
                                      f"{bundle_id}; refusing installation")
-                if updating:
-                    if not version_is_newer(
-                        inspected.get("version", ""), installed_app.get("version", ""),
-                        inspected.get("build", ""), installed_app.get("build", "")
-                    ):
-                        raise ValueError("downloaded IPA is not newer than the installed version")
-                    if inspected.get("version") != item["version"]:
-                        raise ValueError("downloaded IPA version differs from the source listing")
-                    if item.get("buildVersion") and str(inspected.get("build", "")) != item["buildVersion"]:
-                        raise ValueError("downloaded IPA build differs from the source listing")
+                if reinstalling:
                     prior = config.APPS / saved_id / "app.ipa"
                     if not prior.is_file():
-                        raise ValueError("previously saved IPA is unavailable; update refused")
-                    # Preserve the last saved IPA, in case a new signing attempt
-                    # fails. A failed download/inspection leaves it untouched.
+                        raise ValueError("previously saved IPA is unavailable; reinstall refused")
+                    # Preserve the last saved IPA before replacing it. A failed
+                    # download or invalid bundle never replaces the saved IPA.
                     shutil.copy2(prior, config.APPS / saved_id / "previous.ipa")
                 app.idle()
                 filename = item["downloadURL"].split("?")[0].rsplit("/", 1)[-1] or "source.ipa"
                 app_id = store.add_app(incoming, inspected, filename)
             finally:
                 incoming.unlink(missing_ok=True)
-            result = {"ok": True, "app": item["name"], "app_id": app_id, "version": item["version"], "refresh": "not started"}
+            result = {"ok": True, "app": item["name"], "app_id": app_id,
+                      "version": inspected.get("version") or item["version"],
+                      "build": inspected.get("build") or "", "refresh": "not started"}
             if data.get("install_now", True) and store.device_ids() and app.state()["configured"]:
                 try:
                     result["refresh"] = app.refresh({"app": app_id, "force": True})
