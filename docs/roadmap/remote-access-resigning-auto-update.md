@@ -43,7 +43,7 @@ No remote installation automation should be enabled until this phase succeeds.
 - [ ] Show installed apps, versions, and exact signing expiration.
 - [ ] Keep certificate expiry separate from rolling App ID registration limits.
 - [ ] Display connection and installation readiness.
-- [ ] Provide history, diagnostics, Re-sign, and Re-sign All.
+- [x] Provide history, diagnostics, Re-sign, and no-confirmation background Re-sign All.
 - [ ] Add a mobile-first PWA without consuming an app slot.
 
 Unavailable Apple account information must never be fabricated.

@@ -98,13 +98,31 @@ new_result = '''verify_completed_install() {
   return 1
 }
 
-log "STAGE 4/4: AltServer exited $rc; waiting for iOS to confirm the installed app and profile."
+ALTSERVER_DONE="$(now)"
+log "STAGE 4/4: AltServer exited $rc after $(( ALTSERVER_DONE - RUN_START ))s; waiting for iOS to confirm the installed app and profile."
 if (( rc == 0 )) && verify_completed_install; then'''
-if new_result not in source:
+if 'ALTSERVER_DONE="$(now)"' not in source:
     if source.count(old_result) == 1:
         source = source.replace(old_result, new_result, 1)
     elif 'STAGE 4/4:' in source:
         sys.exit(f"Single-attempt patch verification wait: expected 1 anchor, got {source.count(old_result)}")
+
+timing_anchor = 'if (( rc == 0 )) && verify_completed_install; then\n  msg="refreshed, valid until'
+timed_anchor = ('if (( rc == 0 )) && verify_completed_install; then\n'
+                '  log "Installation verified after $(( $(now) - ALTSERVER_DONE ))s '
+                '(total $(( $(now) - RUN_START ))s)"\n'
+                '  msg="refreshed, valid until')
+if timed_anchor not in source:
+    if source.count(timing_anchor) != 1:
+        sys.exit(f"Single-attempt patch timing: expected 1 anchor, got {source.count(timing_anchor)}")
+    source = source.replace(timing_anchor, timed_anchor, 1)
+
+# Describe the required replacement install accurately without changing the
+# legacy block used above to find and collapse duplicate stage insertions.
+source = source.replace(
+    'log "STAGE 3/4: Asking AltServer to sign and install. One 2FA code may be required."',
+    'log "STAGE 3/4: Asking AltServer to sign and reinstall the refreshed app. One 2FA code may be required."',
+    1)
 
 if source.count(SUCCESS) != 1:
     sys.exit(f"Single-attempt patch: success call appears {source.count(SUCCESS)} times; refusing to write")

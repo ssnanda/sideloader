@@ -238,6 +238,18 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertIn('Expires ${new Date(expiry * 1000).toLocaleString', ui)
         self.assertIn('function sideLoaderAppIdSummary()', ui)
         self.assertIn('Apple remaining/pending unavailable', ui)
+
+    def test_resign_all_starts_background_job_without_confirmation(self):
+        ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
+        wire=(ROOT/'overlay'/'apps-dashboard-wire.js').read_text()
+        flow=(ROOT/'overlay'/'screen-flow-ui.js').read_text()
+        self.assertIn('id="sideloader-resign-all"', ui)
+        self.assertIn('slStartBackgroundResignAll(d.value)', wire)
+        self.assertIn('async function slStartBackgroundResignAll(udid)', flow)
+        self.assertIn('json:{device:udid,force:true}', flow)
+        self.assertIn('Re-sign all started in the background', flow)
+        background = flow[flow.index('async function slStartBackgroundResignAll'):flow.index('async function slAcceptInstall')]
+        self.assertNotIn('confirm', background.lower())
         self.assertIn('row.signing_expiry', ui)
         self.assertIn('class="sl-installed-main"', ui)
 

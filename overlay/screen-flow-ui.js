@@ -139,6 +139,22 @@ async function slStartJob(path,payload={}){
     slFlowBusy=false;render();poll();
   }catch(e){slFlowBusy=false;slMessage("Task not started",e.message);}
 }
+async function slStartBackgroundResignAll(udid){
+  if(slFlowBusy||S.job?.running||S.watcher?.running||!udid)return;
+  slFlowBusy=true;render();
+  try{
+    // Omitting an app intentionally selects every saved IPA assigned to this
+    // device. refresh.sh serializes them; the server job survives navigation
+    // or closing the browser. This explicit bulk action needs no second prompt.
+    const r=await api("/api/refresh",{json:{device:udid,force:true}});
+    if(!r?.job)throw Error("The server did not create a re-signing task.");
+    watched.add(r.job);dismissedJob=null;
+    await refresh();
+    slFlowBusy=false;lastPage=null;render();
+    toast("Re-sign all started in the background. Follow progress in Activity.");
+    poll();
+  }catch(e){slFlowBusy=false;slMessage("Re-sign all not started",e.message);}
+}
 async function slAcceptInstall(){
   if(slFlowBusy||slFlow?.mode!=="confirm")return;
   const data={app:slFlow.appId,device:slFlow.udid,force:true};
@@ -222,7 +238,10 @@ function slWireScreen(){
       slInstall(app,udid,installed);
     };
   });
-  on("signall","onclick",()=>slMessage("Choose one app","Use Install or Re-sign on an app in Step 3. Bulk signing is not started."));
+  on("signall","onclick",()=>{
+    const udid=(S.registered||[])[0]?.udid;
+    if(udid)slStartBackgroundResignAll(udid);
+  });
   // Override legacy browser confirmation handlers with in-page screens.
   on("sideloader-resume","onclick",()=>slScreen("resume"));
   on("useipa","onclick",async()=>{

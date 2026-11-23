@@ -163,18 +163,30 @@ else
   echo 'Building Docker image (Docker cache enabled)...'
   "${compose[@]}" build
 fi
-printf '\nSideLoader version: %s\n' "$(cat "$ROOT_DIR/VERSION")"
 printf 'Local build: %s\n' "$UPSTREAM"
 printf 'GitHub Actions: not used (local build).\n'
-printf 'Username: %s\n' "$SIDELOADER_USER"
-printf 'Reset: ./bin/build-docker.sh --reset-user\n'
+
+login_summary() {
+  printf '\n================================================================\n'
+  printf '  SideLoader v%s\n' "$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
+  printf '  URL:      http://localhost:38080\n'
+  printf '  Username: %s\n' "$SIDELOADER_USER"
+  if [[ -n "$NEW_LOGIN_PASSWORD" ]]; then
+    printf '  Password: %s   (shown once - save it now)\n' "$NEW_LOGIN_PASSWORD"
+  else
+    printf '  Password: unchanged (shown only when created or reset)\n'
+  fi
+  printf '  Reset:    ./bin/build-docker.sh --reset-user\n'
+  printf '================================================================\n'
+}
+
 if [[ "$START" == true ]]; then
-  printf 'Dashboard: http://localhost:38080\n'
   printf 'iPhone on same Wi-Fi: http://<server-LAN-IP>:38080\n'
   printf 'AltStore sources: http://localhost:38080/sources\n'
   printf 'Runtime data is preserved across builds in build/sideloop/data/.\n'
   printf 'Docker project status:\n'
   "${compose[@]}" ps
+  login_summary
   if [[ "$OPEN" == true ]]; then
     case "$(uname -s)" in
       Darwin) open 'http://localhost:38080' ;;
@@ -184,4 +196,5 @@ if [[ "$START" == true ]]; then
   if [[ "$LOGS" == true ]]; then "${compose[@]}" logs -f app; fi
 else
   printf 'Docker images built; existing containers were not started or restarted.\n'
+  login_summary
 fi

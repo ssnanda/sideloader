@@ -147,6 +147,7 @@ function deviceAppsManager() {
       scanReported: Boolean(row.installed), confirmed});
   }
   const rows = [...result.values()].filter(deviceAppIsSideloaded).sort((a,b)=>a.name.localeCompare(b.name));
+  const resignable = rows.filter(row => row.managed && row.installed);
   const busy = deviceAppBusy || Boolean(S.job?.running || S.watcher?.running);
   const blocked = Boolean(S.signing_guard?.blocked);
   const savedBundles = new Map((S.apps || []).map(app => [app.bundle_id, app]));
@@ -185,6 +186,7 @@ function deviceAppsManager() {
       <label for="sideloader-app-device">iPhone</label>
       <select class="fi" id="sideloader-app-device">${devs.map(d=>`<option value="${esc(d.udid)}" ${d.udid===udid?"selected":""}>${esc(d.name||d.udid.slice(0,8))}</option>`).join("")}</select>
       <button type="button" class="cap" id="sideloader-device-app-scan" ${busy?"disabled":""}>${deviceAppBusy?"Scanning…":"Scan iPhone"}</button>
+      <button type="button" class="cap" id="sideloader-resign-all" ${busy||blocked||!resignable.length?"disabled":""}>Re-sign all</button>
       <button type="button" class="cap solid" id="sideloader-add-app" ${busy?"disabled":""}>${appAddOpen?"Close":"Add app"}</button>
     </div>
     ${deviceAppError?`<div class="foot" style="color:var(--red)">${esc(deviceAppError)}</div>`:""}

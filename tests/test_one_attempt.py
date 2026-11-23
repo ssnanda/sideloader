@@ -160,6 +160,8 @@ python3 -m sideloop.retry_guard failed "$out" "$rc" || true
         self.assertIn('for attempt in {1..15}', source)
         self.assertIn('sleep 2', source)
         self.assertIn('waiting for iOS to confirm', source)
+        self.assertIn('ALTSERVER_DONE="$(now)"', source)
+        self.assertIn('Installation verified after $(( $(now) - ALTSERVER_DONE ))s', source)
 
 
 if __name__ == '__main__':

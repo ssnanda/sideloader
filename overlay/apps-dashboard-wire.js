@@ -42,6 +42,10 @@
     const d = root.querySelector("#sideloader-app-device");
     if (d) scanDeviceApps(d.value);
   });
+  on("sideloader-resign-all", "onclick", () => {
+    const d = root.querySelector("#sideloader-app-device");
+    if (d) slStartBackgroundResignAll(d.value);
+  });
   root.querySelectorAll("[data-device-app-pick]").forEach(input => input.onchange = e => {
     const bundle = e.target.dataset.deviceAppPick;
     if (e.target.checked) deviceAppSelected.add(bundle);
