@@ -175,7 +175,61 @@ function sideLoaderVersionStrip() {
   </div>`;
 }
 
+function slRemoteProfile(app) {
+  const profiles = S.remote_server?.profiles || [];
+  return profiles.some(profile => deviceBundleMatches(profile.bundle, app.bundle_id));
+}
+
+function remoteAppsManager() {
+  const remote = S.remote_server || {};
+  const device = (S.registered || [])[0];
+  const udid = device?.udid || "";
+  const ready = remote.reachable && remote.account_ready && remote.paired && udid;
+  const online = remote.reachable ? "Paired iPhone reachable through VPN" :
+    remote.paired ? "iPhone not reachable — connect to Wi-Fi and NetBird" :
+    "Pairing file is required on the remote server";
+  const saved = S.apps || [];
+  return '<div class="sl-app-manager sl-remote-manager">' +
+    '<div class="sl-remote-header"><b>Remote SideLoader · OpenShift / VPN</b>' +
+    '<span class="sl-remote-status">' + esc(online) + '</span>' +
+    '<p>RemotePairing transport uses AltKeeper on the same Pod. An Apple account must be configured there separately. ' +
+    'Profiles do not prove apps are currently installed. Only explicitly selected apps are processed.</p>' +
+    '<div class="sl-remote-actions">' +
+    '<button type="button" class="cap" id="sideloader-remote-diagnose">Test VPN & pairing</button>' +
+    '<button type="button" class="cap" id="sideloader-remote-refresh">Refresh status</button>' +
+    '<button type="button" class="cap" disabled title="Requires verified installed-app inventory">Re-sign all (unavailable)</button>' +
+    '</div></div>' +
+    (!remote.available ? '<p class="foot">' + esc(remote.message || "AltKeeper not yet connected.") + '</p>' : '') +
+    (!remote.account_ready ? '<p class="foot">AltKeeper Apple account is not ready. Configure its account before remote signing.</p>' : '') +
+    '<div class="sl-installed-title"><b>Saved IPAs</b><span>' + saved.length + '</span></div>' +
+    '<p class="foot">These are saved IPAs, not a verified list of installed iPhone apps.</p>' +
+    '<div class="list sl-app-list">' + saved.map(app => {
+      const catalog = sourceCatalog.filter(source => source.bundleIdentifier === app.bundle_id);
+      const source = catalog.length === 1 ? catalog[0] : null;
+      const hasProfile = slRemoteProfile(app);
+      return '<div class="sl-app-entry" data-bundle="' + esc(app.bundle_id) + '">' +
+        '<span class="sl-app-detail"><b>' + esc(app.name) + '</b><small>' +
+        esc(app.version) + ' · ' + esc(app.bundle_id) + '</small><small>' +
+        (hasProfile ? "Remote provisioning profile found; installation not independently confirmed" :
+          "No matching remote provisioning profile confirmed") +
+        '</small></span><span class="sl-app-actions">' +
+        '<button type="button" class="cap" data-remote-resign="' + esc(app.id) + '" ' +
+        (!ready || !hasProfile ? "disabled" : "") + '>Re-sign</button>' +
+        (catalog.length ? '<button type="button" class="cap sl-update-action" data-remote-latest="' +
+          esc(app.id) + '" data-remote-source="' + esc(source?.source_id || "") + '" ' +
+          (!ready || S.job?.running ? "disabled" : "") + '>Reinstall latest</button>' : '') +
+        '<button type="button" class="cap" data-remote-reinstall="' + esc(app.id) + '" ' +
+          (!ready || S.job?.running ? "disabled" : "") + '>Install saved IPA</button>' +
+        '</span></div>';
+    }).join("") + '</div>' +
+    '<div class="sl-remote-footer"><button type="button" class="cap" id="sideloader-add-app">' +
+    (appAddOpen ? "Close" : "Add app") + '</button>' +
+    (appAddOpen ? '<p class="foot">Use Sources to add a new IPA or import one into the saved list. ' +
+      '<a href="/sources">Manage sources</a></p>' : '') + '</div></div>';
+}
+
 function deviceAppsManager() {
+  if (S.remote_server?.enabled) return remoteAppsManager();
   const devs = S.registered || [];
   const chosen = devs.find(d => d.udid === deviceAppTarget) || devs[0];
   if (!chosen) return `<div class="foot">Connect an iPhone in Step 1 before managing apps.</div>`;
