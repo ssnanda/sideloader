@@ -301,7 +301,7 @@ def install_job(job, udid, ipa_path):
     _follow(job, {"install"})
 
 
-def latest_job(job, udid, app_id, bundle, sources):
+def latest_job(job, udid, app_id, bundle, sources, source_id=None):
     """Download the latest saved-source IPA, then install via RemotePairing.
 
     One SideLoader job owns both operations; SideLoader doesn't start a second
@@ -312,13 +312,14 @@ def latest_job(job, udid, app_id, bundle, sources):
     candidates = [(source, record)
                   for source in available if not source.get("error")
                   for record in source.get("apps", [])
-                  if record.get("bundleIdentifier") == bundle]
+                  if record.get("bundleIdentifier") == bundle
+                  and (source_id is None or source["id"] == source_id)]
     if not candidates:
         raise ValueError("No matching saved GitHub/AltStore source is available")
     unique = {source["id"] for source, _record in candidates}
     if len(unique) != 1:
         raise ValueError("Multiple sources offer this bundle; select one in the Docker Sources list")
-    source, listing = candidates[0]
+    source, _listing = candidates[0]
 
     # The job already owns the SideLoader busy slot. Sources.install normally
     # asserts idle before importing; this no-op facade is scoped to this one
