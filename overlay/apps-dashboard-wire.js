@@ -63,6 +63,12 @@
       try { await uninstallDeviceApps(d.value,[bundle]); } catch(e) { toast(e.message); }
     }
   });
+  root.querySelectorAll("[data-device-app-remove]").forEach(button => button.onclick = () => {
+    const d = root.querySelector("#sideloader-app-device");
+    if (!d || deviceAppScannedFor !== d.value) return toast("Scan this iPhone first.");
+    const bundle = button.dataset.deviceAppRemove;
+    if (deviceAppRows.some(row => row.bundle_id === bundle)) slRemoveApps(d.value, [bundle]);
+  });
   on("sideloader-device-app-sync", "onclick", async () => {
     const d = root.querySelector("#sideloader-app-device");
     if (!d || deviceAppScannedFor !== d.value || deviceAppBusy) return toast("Scan this iPhone first.");

@@ -229,6 +229,17 @@ class DashboardPatchTests(unittest.TestCase):
         self.assertIn('row.managed?.bundle_id || row.bundle_id', ui)
         self.assertIn('deviceBundleMatches(row.bundle_id,app.bundle_id)', wire)
 
+    def test_managed_installed_app_can_be_uninstalled_from_iphone(self):
+        ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
+        wire=(ROOT/'overlay'/'apps-dashboard-wire.js').read_text()
+        flow=(ROOT/'overlay'/'screen-flow-ui.js').read_text()
+        self.assertIn('data-device-app-remove="${esc(row.bundle_id)}"', ui)
+        self.assertIn('>Uninstall</button>', ui)
+        self.assertIn('root.querySelectorAll("[data-device-app-remove]")', wire)
+        self.assertIn('slRemoveApps(d.value, [bundle])', wire)
+        self.assertIn('These apps and their on-device data may be deleted', flow)
+        self.assertIn('/api/device/apps/remove', flow)
+
     def test_apps_manager_shows_signing_days_remaining(self):
         ui=(ROOT/'overlay'/'apps-dashboard-ui.js').read_text()
         self.assertIn('function signingDaysLeft(target, scannedExpiry=0)', ui)

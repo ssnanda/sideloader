@@ -193,7 +193,8 @@ function deviceAppsManager() {
     <div class="sl-installed-title"><b>Installed apps</b>${scanned?`<span>${rows.length}</span>`:""}</div>
     ${!scanned?'<div class="sl-empty-installed">Scan this iPhone to show installed apps and signing time remaining.</div>':""}
     <div class="list sl-app-list">${rows.map(row=>{
-      const button = row.managed || row.sourceMatch ? "Re-sign" : "Remove";
+      const canResign = Boolean(row.managed || row.sourceMatch);
+      const button = canResign ? "Re-sign" : "Remove";
       const disabled = busy || (!row.managed && !row.relatedManaged && !scanned);
       const target = row.managed?.targets?.find(t => t.udid === udid);
       const deviceSigning = signingDaysLeft(target, row.signing_expiry);
@@ -202,6 +203,7 @@ function deviceAppsManager() {
       return `<div class="sl-app-entry" data-bundle="${esc(row.bundle_id)}">
         <span class="sl-app-detail"><span class="sl-installed-main"><b>${esc(row.name)}</b><strong class="sl-signing-days">${esc(deviceSigning)}</strong></span><small>${esc(expiryText)} · ${esc(subtitle)}${row.version?" · "+esc(row.version):""}</small></span>
         <button type="button" class="cap ${row.installed?"":"solid"}" ${row.sourceMatch&&!row.managed?`data-device-source-action="${esc(row.sourceMatch.bundleIdentifier)}"`:`data-device-app-action="${esc(row.managed?.bundle_id || row.bundle_id)}"`} ${disabled?"disabled":""}>${button}</button>
+        ${canResign?`<button type="button" class="cap sl-uninstall" data-device-app-remove="${esc(row.bundle_id)}" ${busy?"disabled":""}>Uninstall</button>`:""}
       </div>`;
     }).join("")}</div>
     ${blocked?`<div class="foot" style="color:var(--red)">Apple signing is paused. Scanning and removal still work; use Install to see why signing is blocked.</div>`:""}
