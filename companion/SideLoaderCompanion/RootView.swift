@@ -61,24 +61,36 @@ private struct AppsView: View {
                         Label(device.live?.reachable == true ? "Reachable" : "Offline or unverified",
                               systemImage: device.live?.reachable == true ? "iphone.radiowaves.left.and.right" : "iphone.slash")
                             .foregroundStyle(device.live?.reachable == true ? .green : .secondary)
+                        if model.hasFreshInventory, let checked = model.inventoryCheckedAt {
+                            Text("Installed apps verified at \(checked.formatted(date: .omitted, time: .shortened))")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
 
-            Section("Managed apps") {
+            Section("Installed apps") {
                 if model.visibleApps.isEmpty {
-                    ContentUnavailableView("No managed apps", systemImage: "app.dashed",
-                                           description: Text("No SideLoader app is assigned to this iPhone."))
+                    ContentUnavailableView("No installed apps confirmed", systemImage: "app.dashed",
+                                           description: Text("No SideLoader-managed apps are confirmed installed on this iPhone."))
                 } else {
                     ForEach(model.visibleApps, id: \.app.id) { item in
-                        AppRow(app: item.app, target: item.target, serverNow: model.state?.now ?? 0)
+                        AppRow(app: item.app, target: item.target, serverNow: model.state?.now ?? 0,
+                               verifiedByScan: model.hasFreshInventory)
                     }
                 }
             }
 
+            if !model.inventoryMessage.isEmpty {
+                Section { Text(model.inventoryMessage).foregroundStyle(.orange) }
+            }
             if !model.errorMessage.isEmpty {
                 Section { Text(model.errorMessage).foregroundStyle(.red) }
             }
+        }
+        .onChange(of: model.selectedDeviceID) { _, _ in
+            if !model.isLoading { Task { await model.refresh() } }
         }
         .navigationTitle("Apps")
         .toolbar {
@@ -100,8 +112,10 @@ private struct AppRow: View {
     let app: ManagedApp
     let target: AppTarget
     let serverNow: Int
+    let verifiedByScan: Bool
 
     private var status: (String, Color, String) {
+        if verifiedByScan { return ("Installed", .green, "checkmark.circle.fill") }
         switch target.installation?.state {
         case "installed": return ("Installed", .green, "checkmark.circle.fill")
         case "missing": return ("Missing", .red, "xmark.circle.fill")
