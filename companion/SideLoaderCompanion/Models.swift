@@ -27,7 +27,6 @@ struct RemoteServer: Decodable {
 
 struct RemoteProfile: Decodable {
     let bundle: String
-    let expires: Int?
 }
 
 struct RegisteredDevice: Decodable, Identifiable, Hashable {
