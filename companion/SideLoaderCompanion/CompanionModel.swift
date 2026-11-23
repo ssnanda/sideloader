@@ -40,7 +40,7 @@ final class CompanionModel: ObservableObject {
 
     var visibleApps: [(app: ManagedApp, target: AppTarget)] {
         guard let device = selectedDevice else { return [] }
-        let assigned = (state?.apps ?? []).compactMap { app in
+        let assigned: [(app: ManagedApp, target: AppTarget)] = (state?.apps ?? []).compactMap { app in
             app.targets.first(where: { $0.udid.caseInsensitiveCompare(device.udid) == .orderedSame }).map { (app, $0) }
         }
         let onDevice = inventoryDeviceID.caseInsensitiveCompare(device.udid) == .orderedSame
