@@ -39,6 +39,18 @@ def enabled():
     return bool(os.getenv(REMOTE_URL, "").strip())
 
 
+def bootstrap_device():
+    """Register the explicitly selected remote iPhone in SideLoader's own data."""
+    if not enabled():
+        return
+    udid = os.getenv(REMOTE_UDID, "").strip()
+    if not re.fullmatch(r"[0-9A-Fa-f-]{20,64}", udid):
+        raise ValueError("SIDELOADER_REMOTE_UDID must be a real paired iPhone UDID")
+    from . import store
+    if store.resolve_device(udid) is None:
+        store.add_device(udid, os.getenv("SIDELOADER_REMOTE_DEVICE_NAME", "Remote iPhone"))
+
+
 def _endpoint():
     raw = os.getenv(REMOTE_URL, "").strip()
     parsed = urllib.parse.urlsplit(raw)
