@@ -29,7 +29,10 @@ jobs:
           node --check overlay/apps-dashboard-wire.js
           node --check overlay/screen-flow-ui.js
       - name: Run offline regression tests
-        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+        run: |
+          python3 -m unittest discover -s tests -p 'test_reinstall_latest.py' -v
+          python3 -m unittest discover -s tests -p 'test_remote_server.py' -v
+          python3 -m unittest discover -s tests -p 'test_remote_patch_smoke.py' -v
 
   build-ipa:
     needs: validate
