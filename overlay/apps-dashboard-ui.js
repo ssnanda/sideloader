@@ -59,6 +59,38 @@ function deviceBundleMatches(deviceBundle, sourceBundle) {
   return deviceBundle.startsWith(prefix) && /^[A-Z0-9]{10}$/.test(deviceBundle.slice(prefix.length));
 }
 
+// Compare conventional dotted app versions. An ambiguous version is never
+// presented as a safe upgrade, but manual IPA import remains available.
+function slNumericVersion(version) {
+  const value = String(version || "").trim();
+  return /^[0-9]+(?:\.[0-9]+)*$/.test(value) ? value.split(".").map(Number) : null;
+}
+function slNewerVersion(version, installedVersion, build="", installedBuild="") {
+  const candidate = slNumericVersion(version), current = slNumericVersion(installedVersion);
+  if (!candidate || !current) return false;
+  for (let i=0;i<Math.max(candidate.length,current.length);i++) {
+    const x=candidate[i]||0,y=current[i]||0;
+    if (x!==y) return x>y;
+  }
+  const b=slNumericVersion(build), installed=slNumericVersion(installedBuild);
+  if (!b||!installed) return false;
+  for (let i=0;i<Math.max(b.length,installed.length);i++) {
+    const x=b[i]||0,y=installed[i]||0;
+    if (x!==y) return x>y;
+  }
+  return false;
+}
+function slAvailableUpdate(row) {
+  // Never match an update by app name: the IPA bundle ID must be identical.
+  if (!row.managed || !row.scanReported || !row.version) return null;
+  const matching = sourceCatalog.filter(src =>
+    src.bundleIdentifier===row.managed.bundle_id &&
+    slNewerVersion(src.version,row.version,src.buildVersion,row.build));
+  return matching.sort((a,b) =>
+    slNewerVersion(a.version,b.version,a.buildVersion,b.buildVersion) ? -1 :
+    slNewerVersion(b.version,a.version,b.buildVersion,a.buildVersion) ? 1 : 0)[0] || null;
+}
+
 function normalizedAppName(name) {
   return String(name || "").trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "");
 }
@@ -147,6 +179,7 @@ function deviceAppsManager() {
       scanReported: Boolean(row.installed), confirmed});
   }
   const rows = [...result.values()].filter(deviceAppIsSideloaded).sort((a,b)=>a.name.localeCompare(b.name));
+  const availableUpdates = rows.filter(row => slAvailableUpdate(row));
   const resignable = rows.filter(row => row.managed && row.installed);
   const busy = deviceAppBusy || Boolean(S.job?.running || S.watcher?.running);
   const blocked = Boolean(S.signing_guard?.blocked);
@@ -161,14 +194,20 @@ function deviceAppsManager() {
         const saved = savedBundles.get(app.bundleIdentifier);
         const currentVersion = saved?.version || "";
         const identical = saved && currentVersion === app.version;
-        const installed = rows.some(row => deviceBundleMatches(row.bundle_id, app.bundleIdentifier));
-        const label = installed && identical ? "Installed" : identical ? "Add" : saved ? "Update & add" : "Add";
+        const installedRow = rows.find(row => row.managed?.bundle_id === app.bundleIdentifier);
+        const newer = Boolean(installedRow && slNewerVersion(
+          app.version,installedRow.version,app.buildVersion,installedRow.build));
+        const label = newer ? "Update" : installedRow ? "Installed" :
+          identical ? "Install" : saved ? "Update & add" : "Add";
+        const action = newer ? `data-source-update="${esc(app.bundleIdentifier)}" data-source-id="${esc(app.source_id)}"` :
+          identical ? `data-imported-app="${esc(saved.id)}"` :
+          `data-source-app="${esc(app.bundleIdentifier)}"`;
         return `<div class="sl-app-entry">
           <span class="sl-app-detail"><b>${esc(app.name)}</b>
             <small>${esc(app.version)} · ${esc(app.source_name)}</small>
           </span>
-          <button type="button" class="cap" ${identical?`data-imported-app="${esc(saved.id)}"`:`data-source-app="${esc(app.bundleIdentifier)}"`}
-            ${(installed&&identical)||sourceCatalogBusy?"disabled":""}>${label}</button>
+          <button type="button" class="cap" ${action}
+            ${installedRow&&!newer||sourceCatalogBusy?"disabled":""}>${label}</button>
         </div>`;
       }).join("") || '<div class="foot">No apps available. Add or scan for sources first.</div>'}
   </section>`;
@@ -186,10 +225,13 @@ function deviceAppsManager() {
       <label for="sideloader-app-device">iPhone</label>
       <select class="fi" id="sideloader-app-device">${devs.map(d=>`<option value="${esc(d.udid)}" ${d.udid===udid?"selected":""}>${esc(d.name||d.udid.slice(0,8))}</option>`).join("")}</select>
       <button type="button" class="cap" id="sideloader-device-app-scan" ${busy?"disabled":""}>${deviceAppBusy?"Scanning…":"Scan iPhone"}</button>
+      <button type="button" class="cap" id="sideloader-check-app-updates" ${busy||sourceCatalogBusy?"disabled":""}>${sourceCatalogBusy?"Checking…":"Check updates"}</button>
       <button type="button" class="cap" id="sideloader-resign-all" ${busy||blocked||!resignable.length?"disabled":""}>Re-sign all</button>
       <button type="button" class="cap solid" id="sideloader-add-app" ${busy?"disabled":""}>${appAddOpen?"Close":"Add app"}</button>
     </div>
     ${deviceAppError?`<div class="foot" style="color:var(--red)">${esc(deviceAppError)}</div>`:""}
+    ${sourceCatalogError?`<div class="foot" style="color:var(--red)">Update check: ${esc(sourceCatalogError)}</div>`:""}
+    ${scanned && sourceCatalogLoaded && availableUpdates.length ? `<div class="sl-update-summary">${availableUpdates.length} update${availableUpdates.length===1?"":"s"} available from saved sources</div>` : ""}
     <div class="sl-installed-title"><b>Installed apps</b>${scanned?`<span>${rows.length}</span>`:""}</div>
     ${!scanned?'<div class="sl-empty-installed">Scan this iPhone to show installed apps and signing time remaining.</div>':""}
     <div class="list sl-app-list">${rows.map(row=>{
@@ -197,13 +239,19 @@ function deviceAppsManager() {
       const button = canResign ? "Re-sign" : "Remove";
       const disabled = busy || (!row.managed && !row.relatedManaged && !scanned);
       const target = row.managed?.targets?.find(t => t.udid === udid);
+      const update = slAvailableUpdate(row);
       const deviceSigning = signingDaysLeft(target, row.signing_expiry);
       const expiryText = signingExpiryText(target, row.signing_expiry);
       const subtitle = row.relatedManaged ? `Saved IPA uses different bundle ID ${row.relatedManaged.bundle_id}` : row.bundle_id;
       return `<div class="sl-app-entry" data-bundle="${esc(row.bundle_id)}">
-        <span class="sl-app-detail"><span class="sl-installed-main"><b>${esc(row.name)}</b><strong class="sl-signing-days">${esc(deviceSigning)}</strong></span><small>${esc(expiryText)} · ${esc(subtitle)}${row.version?" · "+esc(row.version):""}</small></span>
-        <button type="button" class="cap ${row.installed?"":"solid"}" ${row.sourceMatch&&!row.managed?`data-device-source-action="${esc(row.sourceMatch.bundleIdentifier)}"`:`data-device-app-action="${esc(row.managed?.bundle_id || row.bundle_id)}"`} ${disabled?"disabled":""}>${button}</button>
-        ${canResign?`<button type="button" class="cap sl-uninstall" data-device-app-remove="${esc(row.bundle_id)}" ${busy?"disabled":""}>Uninstall</button>`:""}
+        <span class="sl-app-detail"><span class="sl-installed-main"><b>${esc(row.name)}</b><strong class="sl-signing-days">${esc(deviceSigning)}</strong></span><small>${esc(expiryText)} · ${esc(subtitle)}${row.version?" · "+esc(row.version):""}</small>
+          ${update ? `<small class="sl-app-update-hint">Update: ${esc(row.version)} → ${esc(update.version)} · ${esc(update.source_name)}</small>` : ""}
+        </span>
+        <span class="sl-app-actions">
+          <button type="button" class="cap ${row.installed?"":"solid"}" ${row.sourceMatch&&!row.managed?`data-device-source-action="${esc(row.sourceMatch.bundleIdentifier)}"`:`data-device-app-action="${esc(row.managed?.bundle_id || row.bundle_id)}"`} ${disabled?"disabled":""}>${button}</button>
+          ${update ? `<button type="button" class="cap sl-update-action" data-device-app-update="${esc(row.bundle_id)}" ${busy||sourceCatalogBusy||blocked?"disabled":""}>Update</button>` : ""}
+          ${canResign?`<button type="button" class="cap sl-uninstall" data-device-app-remove="${esc(row.bundle_id)}" ${busy?"disabled":""}>Uninstall</button>`:""}
+        </span>
       </div>`;
     }).join("")}</div>
     ${blocked?`<div class="foot" style="color:var(--red)">Apple signing is paused. Scanning and removal still work; use Install to see why signing is blocked.</div>`:""}
