@@ -37,6 +37,14 @@
 .sl-installed-main b {font-size:21px;}
 .sl-signing-days {font-size:23px;line-height:1.15;font-weight:850;color:var(--label);letter-spacing:-.02em;}
 .sl-app-entry>.cap {flex:none; min-height:40px;font-size:15px;padding:9px 15px;}
+.sl-app-list>.sl-app-entry {flex-wrap:wrap;}
+.sl-app-actions {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;flex:0 1 auto;}
+.sl-app-actions>.cap {min-height:37px;padding:8px 12px;white-space:nowrap;font-size:13px;}
+.sl-app-actions>.sl-uninstall {color:var(--red);}
+.sl-app-actions>.sl-update-action {color:var(--blue);font-weight:700;}
+.sl-app-update-hint {color:var(--green)!important;font-weight:600;}
+.sl-app-source-hint {font-size:12px!important;}
+.sl-update-summary {margin:8px 2px;color:var(--green);font-size:13px;font-weight:650;}
 .sl-app-entry>.sl-uninstall {color:var(--red);}
 .sl-add-apps {margin-top:22px;display:grid;gap:16px;grid-template-columns:repeat(2,minmax(0,1fr));}
 .sl-add-category {border:1px solid var(--sep);border-radius:14px;overflow:hidden;min-width:0;}
