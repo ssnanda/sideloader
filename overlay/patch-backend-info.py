@@ -65,11 +65,20 @@ replace(server,
 # This is the Apple ID that refresh.sh ACTUALLY passes to AltServer, not
 # merely the email that happened to be shown in the settings form.
 refresh = checkout / "scripts" / "refresh.sh"
-replace(refresh,
-    'log "STAGE 3/4: Asking AltServer to sign and install. One 2FA code may be required."',
-    'log "STAGE 3/4: Asking AltServer to sign and install. One 2FA code may be required."\n'
-    'log "Apple Account passed to AltServer (-a): ${APPLE_ID}"',
-    "runtime signing identity in log")
+account_log = 'log "Apple Account passed to AltServer (-a): ${APPLE_ID}"'
+refresh_source = refresh.read_text()
+if account_log in refresh_source:
+    if refresh_source.count(account_log) != 1:
+        sys.exit("Cannot safely patch AltServer backend runtime signing identity: duplicate account logs")
+else:
+    stage_variants = (
+        'log "STAGE 3/4: Asking AltServer to sign and install. One 2FA code may be required."',
+        'log "STAGE 3/4: Asking AltServer to sign and reinstall the refreshed app. One 2FA code may be required."',
+    )
+    matches = [stage for stage in stage_variants if refresh_source.count(stage) == 1]
+    if len(matches) != 1:
+        sys.exit("Cannot safely patch AltServer backend runtime signing identity: unrecognized Stage 3 block")
+    refresh.write_text(refresh_source.replace(matches[0], matches[0] + "\n" + account_log, 1))
 
 if '    def altserver_check_updates(self, data):' not in server.read_text():
     replace(server,

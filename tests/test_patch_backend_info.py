@@ -107,6 +107,30 @@ class PatchTests(unittest.TestCase):
             self.assertEqual(before.count('Recent commits</a>'), 1)
             self.assertEqual(before.count('id="sideloader-altserver-updates"'), 1)
 
+    def test_repeat_build_accepts_newer_reinstall_stage_wording(self):
+        """A later overlay changes Stage 3 text after this patch has added its log."""
+        with tempfile.TemporaryDirectory() as temp:
+            checkout = Path(temp)
+            (checkout/'sideloop').mkdir()
+            (checkout/'scripts').mkdir()
+            templates = {
+                'Dockerfile': DOCKER, 'sideloop/server.py': SERVER,
+                'sideloop/index.html': INDEX, 'scripts/refresh.sh': REFRESH,
+            }
+            for name, contents in templates.items():
+                (checkout/name).write_text(contents)
+            cmd = [sys.executable, str(PATCH), temp, str(ROOT/'overlay')]
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            refresh = checkout/'scripts'/'refresh.sh'
+            migrated = refresh.read_text().replace(
+                'Asking AltServer to sign and install.',
+                'Asking AltServer to sign and reinstall the refreshed app.')
+            refresh.write_text(migrated)
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(refresh.read_text(), migrated)
+            self.assertEqual(migrated.count('Apple Account passed to AltServer'), 1)
+
     def test_partial_upstream_links_abort_without_duplicating_controls(self):
         with tempfile.TemporaryDirectory() as temp:
             checkout = Path(temp)
