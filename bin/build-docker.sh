@@ -100,10 +100,15 @@ if [[ ! -f "$UPSTREAM/.env" ]]; then
 fi
 mkdir -p "$UPSTREAM/data"
 chmod 700 "$UPSTREAM/data"
-credential_args=()
-if [[ "$RESET_USER" == true ]]; then credential_args+=(--reset); fi
+load_credentials() {
+  if [[ "$RESET_USER" == true ]]; then
+    python3 "$ROOT_DIR/overlay/local_credentials.py" "$UPSTREAM/data/ui.json" --reset
+  else
+    python3 "$ROOT_DIR/overlay/local_credentials.py" "$UPSTREAM/data/ui.json"
+  fi
+}
 IFS=$'\t' read -r SIDELOADER_USER NEW_LOGIN_PASSWORD < <(
-  python3 "$ROOT_DIR/overlay/local_credentials.py" "$UPSTREAM/data/ui.json" "${credential_args[@]}"
+  load_credentials
 )
 if [[ -n "$NEW_LOGIN_PASSWORD" ]]; then
   printf '\nNew SideLoader login (shown once - save it now):\n'
