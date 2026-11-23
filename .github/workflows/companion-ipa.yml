@@ -1,10 +1,8 @@
 name: SideLoader CI and Companion Release
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "VERSION"
+  # Normal VS Code commits, version bumps and Docker builds never launch CI.
+  # Build/publish the iPhone Companion only with an explicit manual action.
   workflow_dispatch:
 
 permissions:
