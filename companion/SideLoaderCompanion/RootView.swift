@@ -82,6 +82,57 @@ private struct AppsView: View {
                 }
             }
 
+            if model.isStartingSign || model.signingJob != nil || !model.signingMessage.isEmpty {
+                Section("App signing") {
+                    if !model.signingAppName.isEmpty {
+                        Text(model.signingAppName).font(.headline)
+                    }
+                    if model.isStartingSign {
+                        ProgressView("Starting re-signing…")
+                    }
+                    if let job = model.signingJob {
+                        if job.running {
+                            Text(job.stage?.capitalized ?? "Connecting to SideLoader")
+                                .foregroundStyle(.secondary)
+                            if let fraction = job.fraction, fraction > 0 {
+                                ProgressView(value: min(1, max(0, fraction)))
+                            } else {
+                                ProgressView()
+                            }
+                            if job.needsInput && job.acceptsInput {
+                                Text(job.verificationDelivery == "reported_sent"
+                                     ? "Apple reported a verification code was sent to trusted devices."
+                                     : "SideLoader requested your Apple verification code. Check your trusted devices.")
+                                    .font(.footnote)
+                                if let seconds = job.verificationSecondsRemaining {
+                                    Text("\(seconds) seconds left for this attempt")
+                                        .font(.footnote).foregroundStyle(.secondary)
+                                }
+                                TextField("6-digit verification code", text: $model.verificationCode)
+                                    .keyboardType(.numberPad)
+                                Button(model.isSubmittingCode ? "Submitting…" : "Submit code") {
+                                    Task { await model.submitVerificationCode() }
+                                }
+                                .disabled(model.isSubmittingCode ||
+                                          model.verificationCode.range(of: "^[0-9]{6}$",
+                                                                     options: .regularExpression) == nil)
+                            }
+                        } else {
+                            Label(job.rc == 0 ? "Re-signing finished" : "Re-signing failed",
+                                  systemImage: job.rc == 0 ? "checkmark.circle" : "exclamationmark.triangle")
+                            if let detail = job.last, !detail.isEmpty {
+                                Text(detail).font(.footnote).foregroundStyle(.secondary)
+                            }
+                            Button("Dismiss") { model.dismissSigningResult() }
+                        }
+                    }
+                    if !model.signingMessage.isEmpty {
+                        Text(model.signingMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
             if !model.inventoryMessage.isEmpty {
                 Section { Text(model.inventoryMessage).foregroundStyle(.orange) }
             }
@@ -109,6 +160,7 @@ private struct AppsView: View {
 }
 
 private struct AppRow: View {
+    @EnvironmentObject private var model: CompanionModel
     let app: ManagedApp
     let target: AppTarget
     let serverNow: Int
@@ -144,7 +196,20 @@ private struct AppRow: View {
                 Spacer()
                 Label(status.0, systemImage: status.2).font(.caption).foregroundStyle(status.1)
             }
-            Text(expiry).font(.subheadline).fontWeight(.semibold)
+            HStack(spacing: 10) {
+                Text(expiry).font(.subheadline).fontWeight(.semibold)
+                Spacer()
+                if model.signingAppID == app.id && model.signingIsBusy {
+                    ProgressView().controlSize(.small)
+                }
+                Button("Re-sign") {
+                    Task { await model.reSign(app) }
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.signingIsBusy || model.isLoading ||
+                          !model.hasFreshInventory ||
+                          model.selectedDevice?.live?.reachable != true)
+            }
         }
         .padding(.vertical, 4)
     }
