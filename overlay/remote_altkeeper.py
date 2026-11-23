@@ -301,6 +301,53 @@ def install_job(job, udid, ipa_path):
     _follow(job, {"install"})
 
 
+def latest_job(job, udid, app_id, bundle, sources):
+    """Download the latest saved-source IPA, then install via RemotePairing.
+
+    One SideLoader job owns both operations; SideLoader doesn't start a second
+    Apple sign-in before the user's explicit Reinstall latest confirmation.
+    """
+    _assert_device(udid)
+    available = sources.list().get("sources", [])
+    candidates = [(source, record)
+                  for source in available if not source.get("error")
+                  for record in source.get("apps", [])
+                  if record.get("bundleIdentifier") == bundle]
+    if not candidates:
+        raise ValueError("No matching saved GitHub/AltStore source is available")
+    unique = {source["id"] for source, _record in candidates}
+    if len(unique) != 1:
+        raise ValueError("Multiple sources offer this bundle; select one in the Docker Sources list")
+    source, listing = candidates[0]
+
+    # The job already owns the SideLoader busy slot. Sources.install normally
+    # asserts idle before importing; this no-op facade is scoped to this one
+    # serialized import and explicitly forbids a secondary signing attempt.
+    class _ImportOnly:
+        def idle(self):
+            return None
+
+        def state(self):
+            return {"configured": False}
+
+        def refresh(self, _data):
+            raise RuntimeError("Remote import cannot launch local AltServer signing")
+
+    job.say("Downloading the current IPA from saved source " + str(source.get("name", "source"))[:80])
+    result = sources.install(
+        {"source": source["id"], "bundleIdentifier": bundle, "install_now": False},
+        _ImportOnly(),
+    )
+    if result.get("app_id") != app_id:
+        raise RuntimeError("Source imported a different IPA; remote installation refused")
+    from . import config
+    path = config.APPS / app_id / "app.ipa"
+    _assert_device(udid)
+    job.say("Latest source IPA downloaded and verified; installing through RemotePairing")
+    _upload_ipa(path)
+    _follow(job, {"install"})
+
+
 def verification_code(data):
     code = str(data.get("code") or "").strip()
     if not CODE.fullmatch(code):
