@@ -43,6 +43,20 @@ actor SideLoaderAPI {
         return try await post(server: server, path: "/api/refresh", body: data)
     }
 
+    func reinstallLatest(server: URL, device: String, app: String) async throws -> SigningJobStart {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "device": device, "app": app
+        ])
+        return try await post(server: server, path: "/api/remote/latest", body: data)
+    }
+
+    func installSavedRemotely(server: URL, device: String, app: String) async throws -> SigningJobStart {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "device": device, "app": app
+        ])
+        return try await post(server: server, path: "/api/remote/install", body: data)
+    }
+
     func currentJob(server: URL) async throws -> SigningJob? {
         let response: SigningJobResponse = try await get(server: server, path: "/api/job")
         return response.job
