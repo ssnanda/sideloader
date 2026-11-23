@@ -16,7 +16,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import config, ipa, store, github_sources, github_scan, device_app_inventory
+from . import config, ipa, store, github_sources, github_scan
 
 MAX_SOURCE = 2 * 1024 * 1024
 MAX_IPA = 2 * 1024 * 1024 * 1024
@@ -228,6 +228,7 @@ class Sources:
                 saved_app = store.app_view(saved_id)
                 if saved_app["bundle_id"] != bundle_id:
                     raise ValueError("saved IPA bundle identifier does not match the update")
+                from . import device_app_inventory
                 scanned = device_app_inventory.inventory(udid)
                 installed_app = next(
                     (row for row in scanned if _bundle_matches(row["bundle_id"], bundle_id)),
