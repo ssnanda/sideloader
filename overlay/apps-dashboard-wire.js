@@ -42,6 +42,29 @@
     const d = root.querySelector("#sideloader-app-device");
     if (d) scanDeviceApps(d.value);
   });
+  on("sideloader-check-app-updates", "onclick", () => loadSourceCatalog());
+  root.querySelectorAll("[data-source-reinstall]").forEach(button => button.onclick = () => {
+    const selected = sourceCatalog.find(app =>
+      app.bundleIdentifier === button.dataset.sourceReinstall &&
+      app.source_id === button.dataset.sourceId);
+    const d = root.querySelector("#sideloader-app-device");
+    if (selected && d && deviceAppScannedFor === d.value)
+      importSourceApp(selected, true, true, d.value);
+  });
+  root.querySelectorAll("[data-device-app-reinstall]").forEach(button => button.onclick = () => {
+    const d = root.querySelector("#sideloader-app-device");
+    if (!d || deviceAppScannedFor !== d.value) return toast("Scan this iPhone first.");
+    const bundle = button.dataset.deviceAppReinstall;
+    const installed = deviceAppRows.find(row => row.bundle_id === bundle);
+    const saved = (S.apps || []).find(app => installed &&
+      deviceBundleMatches(installed.bundle_id, app.bundle_id));
+    if (!installed || !saved || saved.targets?.every(t =>
+        t.udid !== d.value || t.installation?.state !== "installed"))
+      return toast("Reinstall only applies to confirmed installed apps.");
+    const latest = slLatestSource({...installed, managed:saved, installed:true, scanReported:true});
+    if (!latest) return toast("No matching saved GitHub/AltStore source. Add a source first.");
+    importSourceApp(latest, true, true, d.value);
+  });
   on("sideloader-resign-all", "onclick", () => {
     const d = root.querySelector("#sideloader-app-device");
     if (d) slStartBackgroundResignAll(d.value);
