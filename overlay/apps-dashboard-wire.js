@@ -1,3 +1,34 @@
+  on("sideloader-remote-refresh", "onclick", () => refresh());
+  on("sideloader-remote-diagnose", "onclick", () => {
+    act(async () => {
+      const status = await api("/api/remote/status");
+      const port = status.transport?.tcp_reachable ? "VPN TCP reachable" : "VPN TCP unavailable";
+      const pairing = status.paired && status.reachable ? "RemotePairing connected" : "RemotePairing unavailable";
+      slMessage("Remote iPhone diagnostics", port + " · " + pairing + ". " +
+        (status.transport?.message || status.message || "Check VPN connectivity and pairing."));
+    });
+  });
+  root.querySelectorAll("[data-remote-resign]").forEach(button => button.onclick = () => {
+    const app = (S.apps || []).find(item => item.id === button.dataset.remoteResign);
+    const udid = (S.registered || [])[0]?.udid;
+    if (app && udid) slInstall(app, udid, true);
+  });
+  root.querySelectorAll("[data-remote-latest]").forEach(button => button.onclick = () => {
+    const app = (S.apps || []).find(item => item.id === button.dataset.remoteLatest);
+    const udid = (S.registered || [])[0]?.udid;
+    if (app && udid) slScreen("confirm", {
+      appId: app.id, name: app.name, udid, installed:true,
+      remoteAction:"latest", sourceId:button.dataset.remoteSource || ""
+    });
+  });
+  root.querySelectorAll("[data-remote-reinstall]").forEach(button => button.onclick = () => {
+    const app = (S.apps || []).find(item => item.id === button.dataset.remoteReinstall);
+    const udid = (S.registered || [])[0]?.udid;
+    if (app && udid) slScreen("confirm", {
+      appId: app.id, name: app.name, udid, installed:true,
+      remoteAction:"install"
+    });
+  });
   on("sideloader-compact-altserver-check", "onclick", () => {
     if (altserverChecking) return;
     altserverChecking = true;
