@@ -43,6 +43,12 @@ final class CompanionModel: ObservableObject {
         let assigned: [(app: ManagedApp, target: AppTarget)] = (state?.apps ?? []).compactMap { app in
             app.targets.first(where: { $0.udid.caseInsensitiveCompare(device.udid) == .orderedSame }).map { (app, $0) }
         }
+        if state?.remoteServer?.enabled == true {
+            let profiles = state?.remoteServer?.profiles ?? []
+            return assigned.filter { entry in
+                profiles.contains { Self.bundleMatches($0.bundle, source: entry.app.bundleID) }
+            }.sorted { $0.app.name.localizedCaseInsensitiveCompare($1.app.name) == .orderedAscending }
+        }
         let onDevice = inventoryDeviceID.caseInsensitiveCompare(device.udid) == .orderedSame
         return assigned.filter { entry in
             if onDevice, let installedBundles {
@@ -66,6 +72,13 @@ final class CompanionModel: ObservableObject {
 
     var hasFreshInventory: Bool {
         inventoryDeviceID.caseInsensitiveCompare(selectedDeviceID) == .orderedSame && installedBundles != nil
+    }
+
+    var remoteMode: Bool { state?.remoteServer?.enabled == true }
+
+    var remoteReady: Bool {
+        remoteMode && state?.remoteServer?.paired == true &&
+        state?.remoteServer?.reachable == true && state?.remoteServer?.accountReady == true
     }
 
     func restore() async {
@@ -105,10 +118,12 @@ final class CompanionModel: ObservableObject {
 
     func reSign(_ app: ManagedApp) async {
         guard !isLoading && !signingIsBusy else { return }
-        guard let device = selectedDevice, device.live?.reachable == true,
-              hasFreshInventory,
-              visibleApps.contains(where: { $0.app.id == app.id }) else {
-            signingMessage = "Scan a reachable iPhone before re-signing. Only installed apps can be re-signed."
+        guard let device = selectedDevice,
+              visibleApps.contains(where: { $0.app.id == app.id }),
+              (remoteReady || (device.live?.reachable == true && hasFreshInventory)) else {
+            signingMessage = remoteMode ?
+                "Remote pairing or Apple account unavailable. Confirm the iPhone is on Wi-Fi and NetBird." :
+                "Scan a reachable iPhone before re-signing. Only installed apps can be re-signed."
             return
         }
         isStartingSign = true
@@ -128,6 +143,30 @@ final class CompanionModel: ObservableObject {
         isStartingSign = false
     }
 
+    func reinstallLatest(_ app: ManagedApp) async {
+        guard !isLoading && !signingIsBusy else { return }
+        guard remoteReady, let device = selectedDevice,
+              visibleApps.contains(where: { $0.app.id == app.id }) else {
+            signingMessage = "Remote pairing is unavailable or this app has no matching provisioning profile."
+            return
+        }
+        isStartingSign = true
+        signingMessage = ""
+        do {
+            let server = try serverURL()
+            let started = try await api.reinstallLatest(server: server, device: device.udid, app: app.id)
+            signingAppID = app.id
+            signingAppName = app.name
+            signingJob = nil
+            signingMessage = "Downloading the latest saved-source IPA for remote installation."
+            signingMonitorTask?.cancel()
+            signingMonitorTask = Task { await self.watchSigningJob(id: started.job, server: server) }
+        } catch {
+            signingMessage = "Could not start remote reinstall: \(error.localizedDescription)"
+        }
+        isStartingSign = false
+    }
+
     private func watchSigningJob(id: String, server: URL) async {
         var failedChecks = 0
         while !Task.isCancelled {
@@ -140,10 +179,10 @@ final class CompanionModel: ObservableObject {
                 failedChecks = 0
                 if !job.running {
                     signingMessage = job.rc == 0 ?
-                        "Re-signing completed. Refreshing the iPhone app list." :
-                        "Re-signing failed. Check the job details or Docker Activity."
+                        "SideLoader completed the operation. Refreshing status." :
+                        "SideLoader operation failed. Check Docker Activity."
                     if !isLoading { await refresh() }
-                    if job.rc == 0 { signingMessage = "Re-signing completed." }
+                    if job.rc == 0 { signingMessage = "Operation completed." }
                     return
                 }
             } catch {
@@ -228,6 +267,13 @@ final class CompanionModel: ObservableObject {
     }
 
     private func loadInventory(server: URL) async {
+        if remoteMode {
+            installedBundles = nil
+            inventoryDeviceID = ""
+            inventoryCheckedAt = nil
+            inventoryMessage = "Remote profiles do not verify whether an app remains installed."
+            return
+        }
         guard let device = selectedDevice else {
             installedBundles = nil
             inventoryDeviceID = ""
