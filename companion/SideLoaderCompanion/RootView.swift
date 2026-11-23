@@ -70,16 +70,21 @@ private struct AppsView: View {
                 }
             }
 
-            Section("Installed apps") {
+            Section {
                 if model.visibleApps.isEmpty {
-                    ContentUnavailableView("No installed apps confirmed", systemImage: "app.dashed",
-                                           description: Text("No SideLoader-managed apps are confirmed installed on this iPhone."))
+                    ContentUnavailableView(model.remoteMode ? "No remote profiles found" : "No installed apps confirmed",
+                                           systemImage: "app.dashed",
+                                           description: Text(model.remoteMode ?
+                                               "The server has no matching remote provisioning profiles. This does not prove which apps are installed." :
+                                               "No SideLoader-managed apps are confirmed installed on this iPhone."))
                 } else {
                     ForEach(model.visibleApps, id: \.app.id) { item in
                         AppRow(app: item.app, target: item.target, serverNow: model.state?.now ?? 0,
                                verifiedByScan: model.hasFreshInventory)
                     }
                 }
+            } header: {
+                Text(model.remoteMode ? "Remote profiles · installation unverified" : "Installed apps")
             }
 
             if model.isStartingSign || model.signingJob != nil || !model.signingMessage.isEmpty {
@@ -167,6 +172,7 @@ private struct AppRow: View {
     let verifiedByScan: Bool
 
     private var status: (String, Color, String) {
+        if model.remoteMode { return ("Profile only", .orange, "questionmark.circle.fill") }
         if verifiedByScan { return ("Installed", .green, "checkmark.circle.fill") }
         switch target.installation?.state {
         case "installed": return ("Installed", .green, "checkmark.circle.fill")
@@ -197,7 +203,8 @@ private struct AppRow: View {
                 Label(status.0, systemImage: status.2).font(.caption).foregroundStyle(status.1)
             }
             HStack(spacing: 10) {
-                Text(expiry).font(.subheadline).fontWeight(.semibold)
+                Text(model.remoteMode ? "Saved signing status · " + expiry : expiry)
+                    .font(.subheadline).fontWeight(.semibold)
                 Spacer()
                 if model.signingAppID == app.id && model.signingIsBusy {
                     ProgressView().controlSize(.small)
@@ -207,8 +214,15 @@ private struct AppRow: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(model.signingIsBusy || model.isLoading ||
-                          !model.hasFreshInventory ||
-                          model.selectedDevice?.live?.reachable != true)
+                          !(model.remoteMode ? model.remoteReady :
+                            (model.hasFreshInventory && model.selectedDevice?.live?.reachable == true)))
+            }
+            if model.remoteMode {
+                Button("Reinstall latest") {
+                    Task { await model.reinstallLatest(app) }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.signingIsBusy || model.isLoading || !model.remoteReady)
             }
         }
         .padding(.vertical, 4)
