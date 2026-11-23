@@ -19,9 +19,19 @@ Build an unsigned IPA for SideLoader to sign during installation:
 ./bin/companion-ipa.sh --build-only
 ```
 
-After user-owned device verification and creation of the matching SideLoader
-GitHub release, publish the IPA asset:
+After user-owned device verification, publish the IPA and `altstore.json`.
+The script creates the matching GitHub release when it does not exist:
 
 ```sh
 ./bin/companion-ipa.sh
+```
+
+Like `build-docker.sh`, this invokes `bump-version.sh` first when the repository
+has pending changes. Use `--skip-bump` for a local build without versioning or
+`--no-push` to keep the generated release commit local.
+
+AltStore source URL:
+
+```text
+https://raw.githubusercontent.com/ssnanda/sideloader/main/altstore.json
 ```

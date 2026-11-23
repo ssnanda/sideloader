@@ -1,0 +1,35 @@
+{
+  "name": "SideLoader",
+  "identifier": "com.ajnanda.sideloader.source",
+  "subtitle": "SideLoader companion apps",
+  "description": "Official SideLoader apps published by ssnanda.",
+  "sourceURL": "https://raw.githubusercontent.com/ssnanda/sideloader/main/altstore.json",
+  "website": "https://github.com/ssnanda/sideloader",
+  "iconURL": "https://raw.githubusercontent.com/ssnanda/sideloader/main/companion/AppIcon.png",
+  "tintColor": "087AF0",
+  "featuredApps": ["com.ajnanda.SideLoaderCompanion"],
+  "apps": [
+    {
+      "name": "SideLoader Companion",
+      "bundleIdentifier": "com.ajnanda.SideLoaderCompanion",
+      "developerName": "AJ Nanda",
+      "subtitle": "View SideLoader-managed apps and signing status.",
+      "localizedDescription": "Connect to your SideLoader server over a local network or NetBird. View managed apps, verified installation state, registered iPhones, and remaining signing time.",
+      "iconURL": "https://raw.githubusercontent.com/ssnanda/sideloader/main/companion/AppIcon.png",
+      "tintColor": "087AF0",
+      "category": "utilities",
+      "versions": [
+        {
+          "version": "1.0",
+          "buildVersion": "1",
+          "date": "2026-11-22",
+          "localizedDescription": "Initial SideLoader Companion release.",
+          "downloadURL": "https://github.com/ssnanda/sideloader/releases/latest/download/sideloader-companion.ipa",
+          "size": 119374,
+          "minOSVersion": "17.0"
+        }
+      ]
+    }
+  ],
+  "news": []
+}
