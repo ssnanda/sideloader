@@ -23,22 +23,33 @@ async function loadSourceCatalog() {
   }
 }
 
-async function importSourceApp(item, installed=false) {
+async function importSourceApp(item, installed=false, reinstallLatest=false, device="") {
   if (sourceCatalogBusy) return;
   sourceCatalogBusy = true;
   render();
   try {
-    const r = await api("/api/sources/install", {json:{
+    // Re-read the saved source on the server to fetch the freshest IPA,
+    // then use the same explicit on-screen signing confirmation.
+    const payload = {
       source:item.source_id, bundleIdentifier:item.bundleIdentifier, install_now:false
-    }});
+    };
+    if (reinstallLatest) {
+      if (!device || deviceAppScannedFor!==device ||
+          !deviceAppRows.some(row => deviceBundleMatches(row.bundle_id,item.bundleIdentifier))) {
+        throw new Error("Scan the iPhone and confirm this app is installed before reinstalling.");
+      }
+      payload.device = device;
+      payload.reinstall_latest = true;
+    }
+    const r = await api("/api/sources/install", {json:payload});
     if (!r.app_id) throw new Error("No IPA was imported");
     await refresh();
     const imported = (S.apps || []).find(app => app.id === r.app_id);
-    const chosen = (S.registered || []).find(d => d.udid === deviceAppTarget) || (S.registered || [])[0];
-    if (imported && chosen) singleAppSigning(imported, chosen.udid, installed);
+    const chosen = (S.registered || []).find(d => d.udid === (device || deviceAppTarget)) || (S.registered || [])[0];
+    if (imported && chosen) singleAppSigning(imported, chosen.udid, installed || reinstallLatest);
     else slMessage("IPA imported", item.name + " is now available under Imported IPAs.");
   } catch (e) {
-    slMessage("IPA import failed", e.message);
+    slMessage(reinstallLatest ? "Reinstall latest failed" : "IPA import failed", e.message);
   } finally {
     sourceCatalogBusy = false;
     render();
@@ -80,15 +91,19 @@ function slNewerVersion(version, installedVersion, build="", installedBuild="") 
   }
   return false;
 }
+function slLatestSource(row) {
+  // Match the actual IPA bundle ID, never just a similar app display name.
+  // Reinstallation is allowed for the same version as well as newer versions.
+  if (!row.managed || !row.scanReported || !row.installed) return null;
+  return sourceCatalog.filter(src => src.bundleIdentifier===row.managed.bundle_id)
+    .sort((a,b) =>
+      slNewerVersion(a.version,b.version,a.buildVersion,b.buildVersion) ? -1 :
+      slNewerVersion(b.version,a.version,b.buildVersion,a.buildVersion) ? 1 : 0)[0] || null;
+}
 function slAvailableUpdate(row) {
-  // Never match an update by app name: the IPA bundle ID must be identical.
-  if (!row.managed || !row.scanReported || !row.version) return null;
-  const matching = sourceCatalog.filter(src =>
-    src.bundleIdentifier===row.managed.bundle_id &&
-    slNewerVersion(src.version,row.version,src.buildVersion,row.build));
-  return matching.sort((a,b) =>
-    slNewerVersion(a.version,b.version,a.buildVersion,b.buildVersion) ? -1 :
-    slNewerVersion(b.version,a.version,b.buildVersion,a.buildVersion) ? 1 : 0)[0] || null;
+  const latest = slLatestSource(row);
+  return latest && slNewerVersion(latest.version,row.version,latest.buildVersion,row.build) ?
+    latest : null;
 }
 
 function normalizedAppName(name) {
@@ -194,12 +209,12 @@ function deviceAppsManager() {
         const saved = savedBundles.get(app.bundleIdentifier);
         const currentVersion = saved?.version || "";
         const identical = saved && currentVersion === app.version;
-        const installedRow = rows.find(row => row.managed?.bundle_id === app.bundleIdentifier);
-        const newer = Boolean(installedRow && slNewerVersion(
-          app.version,installedRow.version,app.buildVersion,installedRow.build));
-        const label = newer ? "Update" : installedRow ? "Installed" :
+        const installedRow = rows.find(row => row.installed &&
+          row.managed?.bundle_id === app.bundleIdentifier);
+        const label = installedRow ? "Reinstall latest" :
           identical ? "Install" : saved ? "Update & add" : "Add";
-        const action = newer ? `data-source-update="${esc(app.bundleIdentifier)}" data-source-id="${esc(app.source_id)}"` :
+        const action = installedRow ?
+          `data-source-reinstall="${esc(app.bundleIdentifier)}" data-source-id="${esc(app.source_id)}"` :
           identical ? `data-imported-app="${esc(saved.id)}"` :
           `data-source-app="${esc(app.bundleIdentifier)}"`;
         return `<div class="sl-app-entry">
@@ -207,7 +222,7 @@ function deviceAppsManager() {
             <small>${esc(app.version)} · ${esc(app.source_name)}</small>
           </span>
           <button type="button" class="cap" ${action}
-            ${installedRow&&!newer||sourceCatalogBusy?"disabled":""}>${label}</button>
+            ${sourceCatalogBusy||busy?"disabled":""}>${label}</button>
         </div>`;
       }).join("") || '<div class="foot">No apps available. Add or scan for sources first.</div>'}
   </section>`;
@@ -240,16 +255,18 @@ function deviceAppsManager() {
       const disabled = busy || (!row.managed && !row.relatedManaged && !scanned);
       const target = row.managed?.targets?.find(t => t.udid === udid);
       const update = slAvailableUpdate(row);
+      const latestSource = slLatestSource(row);
       const deviceSigning = signingDaysLeft(target, row.signing_expiry);
       const expiryText = signingExpiryText(target, row.signing_expiry);
       const subtitle = row.relatedManaged ? `Saved IPA uses different bundle ID ${row.relatedManaged.bundle_id}` : row.bundle_id;
       return `<div class="sl-app-entry" data-bundle="${esc(row.bundle_id)}">
         <span class="sl-app-detail"><span class="sl-installed-main"><b>${esc(row.name)}</b><strong class="sl-signing-days">${esc(deviceSigning)}</strong></span><small>${esc(expiryText)} · ${esc(subtitle)}${row.version?" · "+esc(row.version):""}</small>
-          ${update ? `<small class="sl-app-update-hint">Update: ${esc(row.version)} → ${esc(update.version)} · ${esc(update.source_name)}</small>` : ""}
+          ${update ? `<small class="sl-app-update-hint">New version: ${esc(row.version)} → ${esc(update.version)} · ${esc(update.source_name)}</small>` :
+            latestSource ? `<small class="sl-app-source-hint">Latest from ${esc(latestSource.source_name)}: ${esc(latestSource.version || "version unspecified")}</small>` : ""}
         </span>
         <span class="sl-app-actions">
           <button type="button" class="cap ${row.installed?"":"solid"}" ${row.sourceMatch&&!row.managed?`data-device-source-action="${esc(row.sourceMatch.bundleIdentifier)}"`:`data-device-app-action="${esc(row.managed?.bundle_id || row.bundle_id)}"`} ${disabled?"disabled":""}>${button}</button>
-          ${update ? `<button type="button" class="cap sl-update-action" data-device-app-update="${esc(row.bundle_id)}" ${busy||sourceCatalogBusy||blocked?"disabled":""}>Update</button>` : ""}
+          ${latestSource ? `<button type="button" class="cap sl-update-action" data-device-app-reinstall="${esc(row.bundle_id)}" ${busy||sourceCatalogBusy||blocked?"disabled":""}>Reinstall latest</button>` : ""}
           ${canResign?`<button type="button" class="cap sl-uninstall" data-device-app-remove="${esc(row.bundle_id)}" ${busy?"disabled":""}>Uninstall</button>`:""}
         </span>
       </div>`;
