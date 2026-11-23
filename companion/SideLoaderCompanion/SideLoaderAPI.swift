@@ -36,6 +36,29 @@ actor SideLoaderAPI {
         return inventory.apps
     }
 
+    func reSign(server: URL, device: String, app: String) async throws -> SigningJobStart {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "device": device, "app": app, "force": true
+        ])
+        return try await post(server: server, path: "/api/refresh", body: data)
+    }
+
+    func currentJob(server: URL) async throws -> SigningJob? {
+        let response: SigningJobResponse = try await get(server: server, path: "/api/job")
+        return response.job
+    }
+
+    func sendVerificationCode(server: URL, code: String) async throws {
+        let data = try JSONSerialization.data(withJSONObject: ["text": code])
+        let _: Data = try await request(server: server, path: "/api/job/input", method: "POST", body: data)
+    }
+
+    private func post<T: Decodable>(server: URL, path: String, body: Data) async throws -> T {
+        let data = try await request(server: server, path: path, method: "POST", body: body)
+        do { return try decoder.decode(T.self, from: data) }
+        catch { throw APIError.invalidResponse(error.localizedDescription) }
+    }
+
     private func get<T: Decodable>(server: URL, path: String) async throws -> T {
         let data: Data = try await request(server: server, path: path, method: "GET", body: nil)
         do { return try decoder.decode(T.self, from: data) }
