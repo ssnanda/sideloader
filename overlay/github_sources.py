@@ -276,7 +276,8 @@ def _release_download(url, token):
     owner, repo, tag, filename = parts[0], parts[1], parts[4], parts[5]
     if not OWNER.fullmatch(owner) or not REPO.fullmatch(repo):
         return None
-    uri = API + f"/repos/{owner}/{repo}/releases/tags/{urllib.parse.quote(tag, safe='')}"
+    uri = (API + f"/repos/{owner}/{repo}/releases/latest" if tag == "latest" else
+           API + f"/repos/{owner}/{repo}/releases/tags/{urllib.parse.quote(tag, safe='')}")
     release = read_json(uri, token)
     asset = next((a for a in release.get("assets", []) if a.get("name") == urllib.parse.unquote(filename)), None)
     if asset is None:
