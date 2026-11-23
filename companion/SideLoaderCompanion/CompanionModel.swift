@@ -15,7 +15,15 @@ final class CompanionModel: ObservableObject {
     @Published var installedBundles: Set<String>?
     @Published var inventoryCheckedAt: Date?
     @Published var inventoryMessage = ""
+    @Published var signingJob: SigningJob?
+    @Published var signingAppID = ""
+    @Published var signingAppName = ""
+    @Published var signingMessage = ""
+    @Published var verificationCode = ""
+    @Published var isStartingSign = false
+    @Published var isSubmittingCode = false
 
+    private var signingMonitorTask: Task<Void, Never>?
     private let api = SideLoaderAPI()
     private let defaults = UserDefaults.standard
 
@@ -36,13 +44,13 @@ final class CompanionModel: ObservableObject {
             app.targets.first(where: { $0.udid.caseInsensitiveCompare(device.udid) == .orderedSame }).map { (app, $0) }
         }
         let onDevice = inventoryDeviceID.caseInsensitiveCompare(device.udid) == .orderedSame
-        return assigned.filter { app, target in
+        return assigned.filter { entry in
             if onDevice, let installedBundles {
                 return installedBundles.contains { installed in
-                    Self.bundleMatches(installed, source: app.bundleID)
+                    Self.bundleMatches(installed, source: entry.0.bundleID)
                 }
             }
-            return target.installation?.state == "installed"
+            return entry.1.installation?.state == "installed"
         }.sorted { $0.app.name.localizedCaseInsensitiveCompare($1.app.name) == .orderedAscending }
     }
 
@@ -91,7 +99,105 @@ final class CompanionModel: ObservableObject {
         }
     }
 
+    var signingIsBusy: Bool {
+        isStartingSign || signingJob?.running == true
+    }
+
+    func reSign(_ app: ManagedApp) async {
+        guard !isLoading && !signingIsBusy else { return }
+        guard let device = selectedDevice, device.live?.reachable == true,
+              hasFreshInventory,
+              visibleApps.contains(where: { $0.app.id == app.id }) else {
+            signingMessage = "Scan a reachable iPhone before re-signing. Only installed apps can be re-signed."
+            return
+        }
+        isStartingSign = true
+        signingMessage = ""
+        do {
+            let server = try serverURL()
+            let started = try await api.reSign(server: server, device: device.udid, app: app.id)
+            signingAppID = app.id
+            signingAppName = app.name
+            signingJob = nil
+            signingMessage = "SideLoader started signing this app."
+            signingMonitorTask?.cancel()
+            signingMonitorTask = Task { await self.watchSigningJob(id: started.job, server: server) }
+        } catch {
+            signingMessage = "Could not start re-signing: \(error.localizedDescription)"
+        }
+        isStartingSign = false
+    }
+
+    private func watchSigningJob(id: String, server: URL) async {
+        var failedChecks = 0
+        while !Task.isCancelled {
+            do {
+                guard let job = try await api.currentJob(server: server), job.id == id else {
+                    signingMessage = "This signing job is no longer available. Check Activity in the Docker dashboard."
+                    return
+                }
+                signingJob = job
+                failedChecks = 0
+                if !job.running {
+                    signingMessage = job.rc == 0 ?
+                        "Re-signing completed. Refreshing the iPhone app list." :
+                        "Re-signing failed. Check the job details or Docker Activity."
+                    if !isLoading { await refresh() }
+                    if job.rc == 0 { signingMessage = "Re-signing completed." }
+                    return
+                }
+            } catch {
+                failedChecks += 1
+                if failedChecks >= 5 {
+                    signingMessage = "Cannot track the job. It may still be running on Docker; check Activity."
+                    return
+                }
+            }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+    }
+
+    func submitVerificationCode() async {
+        guard !isSubmittingCode,
+              verificationCode.range(of: "^[0-9]{6}$", options: .regularExpression) != nil,
+              let job = signingJob, job.running, job.needsInput, job.acceptsInput else { return }
+        isSubmittingCode = true
+        defer { isSubmittingCode = false }
+        do {
+            let server = try serverURL()
+            guard let current = try await api.currentJob(server: server),
+                  current.id == job.id, current.running,
+                  current.needsInput, current.acceptsInput else {
+                signingMessage = "The verification request is no longer active. Refresh the job status."
+                return
+            }
+            try await api.sendVerificationCode(server: server, code: verificationCode)
+            verificationCode = ""
+            signingMessage = "Code submitted to SideLoader. Waiting for Apple's response."
+        } catch {
+            signingMessage = "Code submission failed: \(error.localizedDescription)"
+        }
+    }
+
+    func dismissSigningResult() {
+        guard signingJob?.running != true else { return }
+        signingMonitorTask?.cancel()
+        signingMonitorTask = nil
+        signingJob = nil
+        signingAppID = ""
+        signingAppName = ""
+        signingMessage = ""
+        verificationCode = ""
+    }
+
     func signOutLocally() {
+        signingMonitorTask?.cancel()
+        signingMonitorTask = nil
+        signingJob = nil
+        signingAppID = ""
+        signingAppName = ""
+        signingMessage = ""
+        verificationCode = ""
         isAuthenticated = false
         state = nil
         installedBundles = nil
