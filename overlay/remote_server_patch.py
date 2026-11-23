@@ -126,17 +126,27 @@ def apply(checkout, overlay):
     accepting = '"accepts_input": self.fd is not None'
     remote_accept = '"accepts_input": self.fd is not None or getattr(self, "remote_input", False)'
     jobs = _insert_once(jobs, accepting, remote_accept, "remote verification UI")
+    # The upstream Job.send has already been hardened by
+    # patch-apple-2fa-safety.py. Inject remote handling before its PTY logic,
+    # preserving the strict 6-digit validation and one-use challenge rules.
     send_anchor = '''    def send(self, text):
-        if self.fd is None:'''
+        # This endpoint is exclusively for an active 2FA challenge.'''
     send_remote = '''    def send(self, text):
         if getattr(self, "remote_input", False):
+            code = text.strip()
+            if not re.fullmatch(r"[0-9]{6}", code):
+                raise ValueError("Enter exactly six digits from the Apple verification prompt")
+            with self.lock:
+                if self.kind != "refresh" or not self.running or not self.needs_input:
+                    raise RuntimeError("No Apple verification code is currently requested")
             from . import remote_altkeeper
-            remote_altkeeper.verification_code({"code": text})
+            remote_altkeeper.verification_code({"code": code})
             with self.lock:
                 self.needs_input = False
-                self.lines.append("Remote verification code submitted.")
+                self.verification_deadline = None
+                self.lines.append("Remote Apple verification code submitted [redacted]")
             return
-        if self.fd is None:'''
+        # This endpoint is exclusively for an active 2FA challenge.'''
     jobs = _insert_once(jobs, send_anchor, send_remote, "remote code forwarding")
     jobs_file.write_text(jobs)
 
