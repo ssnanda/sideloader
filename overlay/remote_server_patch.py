@@ -74,7 +74,8 @@ def apply(checkout, overlay):
         title = "Reinstall latest over VPN: " + app["name"]
         job = self.jobs.start("refresh", title,
                               lambda j: remote_altkeeper.latest_job(
-                                  j, udid, app["id"], app["bundle_id"], self.sources
+                                  j, udid, app["id"], app["bundle_id"], self.sources,
+                                  str(data.get("source") or "") or None
                               ))
         return {"job": job.id}
 
