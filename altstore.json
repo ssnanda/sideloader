@@ -7,18 +7,29 @@
   "website": "https://github.com/ssnanda/sideloader",
   "iconURL": "https://raw.githubusercontent.com/ssnanda/sideloader/main/companion/AppIcon.png",
   "tintColor": "087AF0",
-  "featuredApps": ["com.ajnanda.SideLoaderCompanion"],
+  "featuredApps": [
+    "com.ajnanda.SideLoaderCompanion"
+  ],
   "apps": [
     {
       "name": "SideLoader Companion",
       "bundleIdentifier": "com.ajnanda.SideLoaderCompanion",
       "developerName": "AJ Nanda",
-      "subtitle": "View SideLoader-managed apps and signing status.",
-      "localizedDescription": "Connect to your SideLoader server over a local network or NetBird. View managed apps, verified installation state, registered iPhones, and remaining signing time.",
+      "subtitle": "View and re-sign installed SideLoader apps.",
+      "localizedDescription": "Connect to SideLoader using LAN or NetBird. Scan your iPhone's installed apps and re-sign individual SideLoader-managed apps, with live signing status and Apple verification-code entry.",
       "iconURL": "https://raw.githubusercontent.com/ssnanda/sideloader/main/companion/AppIcon.png",
       "tintColor": "087AF0",
       "category": "utilities",
       "versions": [
+        {
+          "version": "1.0",
+          "buildVersion": "69",
+          "date": "2026-11-23",
+          "localizedDescription": "Verified installed-app list, live refresh, individual per-app re-signing with status and Apple verification-code entry.",
+          "downloadURL": "https://github.com/ssnanda/sideloader/releases/download/v0.2.24/sideloader-companion.ipa",
+          "size": 165860,
+          "minOSVersion": "17.0"
+        },
         {
           "version": "1.0",
           "buildVersion": "1",
