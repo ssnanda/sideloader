@@ -58,6 +58,18 @@ struct InstallationState: Decodable {
     let reason: String?
 }
 
+struct DeviceInventory: Decodable {
+    let apps: [PhoneApp]
+}
+
+struct PhoneApp: Decodable {
+    let bundleID: String
+
+    enum CodingKeys: String, CodingKey {
+        case bundleID = "bundle_id"
+    }
+}
+
 struct APIErrorPayload: Decodable {
     let error: String
 }
