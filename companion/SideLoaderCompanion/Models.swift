@@ -58,6 +58,37 @@ struct InstallationState: Decodable {
     let reason: String?
 }
 
+struct SigningJobStart: Decodable {
+    let job: String
+}
+
+struct SigningJobResponse: Decodable {
+    let job: SigningJob?
+}
+
+struct SigningJob: Decodable {
+    let id: String
+    let kind: String
+    let title: String
+    let running: Bool
+    let rc: Int?
+    let stage: String?
+    let fraction: Double?
+    let needsInput: Bool
+    let acceptsInput: Bool
+    let verificationDelivery: String?
+    let verificationSecondsRemaining: Int?
+    let last: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, running, rc, stage, fraction, last
+        case needsInput = "needs_input"
+        case acceptsInput = "accepts_input"
+        case verificationDelivery = "verification_delivery"
+        case verificationSecondsRemaining = "verification_seconds_remaining"
+    }
+}
+
 struct DeviceInventory: Decodable {
     let apps: [PhoneApp]
 }
