@@ -6,6 +6,7 @@ on:
     paths:
       - "overlay/**"
       - "tests/test_reinstall_latest.py"
+      - "tests/test_remote_server.py"
       - ".github/workflows/overlay-tests.yml"
   workflow_dispatch:
 
@@ -20,7 +21,7 @@ jobs:
       - name: Check out sources
         uses: actions/checkout@v4
       - name: Check Python syntax
-        run: python3 -m py_compile overlay/sources.py overlay/device_app_inventory.py overlay/github_sources.py
+        run: python3 -m py_compile overlay/sources.py overlay/device_app_inventory.py overlay/github_sources.py overlay/remote_altkeeper.py overlay/remote_server_patch.py
       - name: Check dashboard JavaScript syntax
         run: |
           node --check overlay/apps-dashboard-ui.js
@@ -28,3 +29,5 @@ jobs:
           node --check overlay/screen-flow-ui.js
       - name: Test source-driven iPhone reinstall
         run: python3 -m unittest discover -s tests -p 'test_reinstall_latest.py' -v
+      - name: Test VPN remote server adapter
+        run: python3 -m unittest discover -s tests -p 'test_remote_server.py' -v
