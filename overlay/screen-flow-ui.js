@@ -25,9 +25,14 @@ function slScreenView(){
   const name=esc(f.name||""),phone=esc((S.registered||[]).find(d=>d.udid===f.udid)?.name||"iPhone");
   let title="",body="",buttons="";
   if(f.mode==="confirm"){
-    title=f.installed?"Re-sign app":"Install on iPhone";
-    body='<div class="sl-screen-emoji">📱</div><h2>'+name+'</h2><p>Device: <b>'+phone+'</b></p><p>This starts one Apple signing attempt. A six-digit code may be requested. You will have 60 seconds to enter it on this screen.</p><p class="sl-screen-note">Failed signing is never automatically retried.</p>';
-    buttons='<button type="button" class="btn" id="sl-screen-install">Confirm '+(f.installed?"re-sign":"install")+'</button>';
+    const remoteLatest=f.remoteAction==="latest",remoteSaved=f.remoteAction==="install";
+    title=remoteLatest?"Reinstall latest from source":remoteSaved?"Install saved IPA over VPN":f.installed?"Re-sign app":"Install on iPhone";
+    body='<div class="sl-screen-emoji">📱</div><h2>'+name+'</h2><p>Device: <b>'+phone+'</b></p><p>'+
+      (remoteLatest?"SideLoader will fetch the newest IPA from your saved source and install it through RemotePairing. The version may be unchanged. ":
+       remoteSaved?"SideLoader will send the saved IPA to the RemotePairing backend. ":
+       "This starts one Apple signing attempt. ")+
+      'A six-digit code may be requested. Failed attempts are never automatically retried.</p>';
+    buttons='<button type="button" class="btn" id="sl-screen-install">Confirm '+(remoteLatest?"reinstall latest":remoteSaved?"remote install":f.installed?"re-sign":"install")+'</button>';
   }else if(f.mode==="paused"||f.mode==="resume"){
     title="Signing paused";
     body='<div class="sl-screen-emoji">🔒</div><h2>No new Apple request was started</h2><p>'+
@@ -158,7 +163,12 @@ async function slStartBackgroundResignAll(udid){
 async function slAcceptInstall(){
   if(slFlowBusy||slFlow?.mode!=="confirm")return;
   const data={app:slFlow.appId,device:slFlow.udid,force:true};
-  if(S.signing_guard?.blocked)return slScreen("paused",slFlow);
+  if(slFlow.remoteAction==="latest"){
+    if(slFlow.sourceId)data.source=slFlow.sourceId;
+    return slStartJob("/api/remote/latest",data);
+  }
+  if(slFlow.remoteAction==="install")return slStartJob("/api/remote/install",data);
+  if(S.signing_guard?.blocked && !S.remote_server?.enabled)return slScreen("paused",slFlow);
   await slStartJob("/api/refresh",data);
 }
 async function slResume(){
