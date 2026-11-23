@@ -52,4 +52,9 @@ if marker not in page:
         sys.exit("Top navigation patch: stylesheet boundary changed")
     page = page.replace("</style>", css + "\n</style>", 1)
 index.write_text(page)
+# Install the optional remote server after the Apple 2FA and screen-flow
+# patches. This preserves their expected job and UI anchors on repeat builds.
+from remote_server_patch import apply as apply_remote_server
+apply_remote_server(root, overlay)
+
 print("Top Settings menu and authenticated Roadmap installed.")
