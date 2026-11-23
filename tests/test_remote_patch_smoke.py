@@ -41,6 +41,7 @@ class RemotePatchSmoke(unittest.TestCase):
                 "    def view(self):\n"
                 "        return {\"accepts_input\": self.fd is not None}\n"
                 "    def send(self, text):\n"
+                "        # This endpoint is exclusively for an active 2FA challenge.\n"
                 "        if self.fd is None:\n"
                 "            raise ValueError('no input')\n"
             )
