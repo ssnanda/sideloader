@@ -65,6 +65,19 @@ def apply(checkout, overlay):
                               lambda j: remote_altkeeper.install_job(j, udid, path))
         return {"job": job.id}
 
+    def remote_latest(self, data):
+        app = self.app(data)
+        udid = self.device(data)
+        if not app or not udid:
+            raise ValueError("Select a saved IPA and the paired iPhone")
+        self.idle()
+        title = "Reinstall latest over VPN: " + app["name"]
+        job = self.jobs.start("refresh", title,
+                              lambda j: remote_altkeeper.latest_job(
+                                  j, udid, app["id"], app["bundle_id"], self.sources
+                              ))
+        return {"job": job.id}
+
     def remote_code(self, data):
         return remote_altkeeper.verification_code(data)
 
@@ -93,6 +106,7 @@ def apply(checkout, overlay):
     route_anchor = '            "/api/refresh": self.refresh,'
     new_route = (route_anchor +
                  '\n            "/api/remote/install": self.remote_install,' +
+                 '\n            "/api/remote/latest": self.remote_latest,' +
                  '\n            "/api/remote/code": self.remote_code,')
     source = _insert_once(source, route_anchor, new_route, "remote POST routes")
 
