@@ -7,6 +7,8 @@ LABEL="local.minisideload.usbmux-relay"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 SCOPE="gui/$(id -u)"
 RELAY="$ROOT_DIR/bin/lib/usbmux-relay.py"
+# Read by SideLoader (mounted at /data) to explain "offline" iPhones.
+STATUS_FILE="$ROOT_DIR/build/sideloop/data/host-devices.json"
 case "${1:-}" in
   install)
     PYTHON="$(command -v python3 || true)"
@@ -17,11 +19,11 @@ case "${1:-}" in
     if [[ -e "$PLIST" ]]; then
       launchctl bootout "$SCOPE" "$PLIST" >/dev/null 2>&1 || true
     fi
-    "$PYTHON" - "$PLIST" "$LABEL" "$PYTHON" "$RELAY" <<'PY'
+    "$PYTHON" - "$PLIST" "$LABEL" "$PYTHON" "$RELAY" "$STATUS_FILE" <<'PY'
 import plistlib
 import sys
 
-path, label, python, relay = sys.argv[1:]
+path, label, python, relay, status_file = sys.argv[1:]
 config = {
     "Label": label,
     "ProgramArguments": [
@@ -34,6 +36,8 @@ config = {
         "27015",
         "--socket",
         "/var/run/usbmuxd",
+        "--status-file",
+        status_file,
     ],
     "RunAtLoad": True,
     "KeepAlive": True,

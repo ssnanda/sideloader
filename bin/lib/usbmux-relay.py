@@ -13,14 +13,18 @@ carries device traffic and the relay becomes a plain byte pipe again.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import plistlib
+import re
 import struct
 import socket
 import socketserver
 import stat
+import subprocess
 import sys
 import threading
+import time
 
 
 HEADER = struct.Struct("<IIII")  # length, version, message, tag
@@ -60,6 +64,106 @@ def rewrite(message: dict) -> dict:
     if message.get("MessageType") == "Attached" and isinstance(message.get("Properties"), dict):
         return {**message, "Properties": tunnelled(message["Properties"])}
     return message
+
+
+# --- Host device status ----------------------------------------------------
+# The container sees iPhones only through usbmuxd. macOS's usbmuxd sometimes
+# stops listing a Wi-Fi iPhone that is still on the network (Finder and
+# CoreDevice still see it). Compare usbmuxd's list with iPhones announcing
+# Wi-Fi sync over Bonjour and write the result where SideLoader can read it.
+SERVICE = "_apple-mobdev2._tcp"
+MAC = re.compile(r"^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$")
+
+
+def usbmux_list(unix_socket_path: str) -> list[dict]:
+    """Ask macOS usbmuxd for its current device list."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+        sock.settimeout(5)
+        sock.connect(unix_socket_path)
+        body = plistlib.dumps({"MessageType": "ListDevices", "ProgName": "sideloader-status",
+                               "ClientVersionString": "sideloader"})
+        sock.sendall(HEADER.pack(HEADER.size + len(body), PLIST_VERSION, PLIST_MESSAGE, 1) + body)
+        length = HEADER.unpack(_recv_exact(sock, HEADER.size))[0]
+        reply = plistlib.loads(_recv_exact(sock, length - HEADER.size))
+    return [d.get("Properties", {}) for d in reply.get("DeviceList", []) if isinstance(d, dict)]
+
+
+def wifi_mac(props: dict) -> str:
+    mac = str(props.get("EscapedFullServiceName") or "").split("@", 1)[0].lower()
+    return mac if MAC.match(mac) else ""
+
+
+def announced_macs(seconds: float = 3.0) -> set[str]:
+    """Wi-Fi MAC addresses of iPhones announcing Wi-Fi sync (dns-sd is built in)."""
+    try:
+        proc = subprocess.Popen(["/usr/bin/dns-sd", "-B", SERVICE, "local."],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    except OSError:
+        return set()
+    time.sleep(seconds)
+    proc.terminate()
+    try:
+        output = proc.communicate(timeout=3)[0]
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        output = proc.communicate()[0]
+    macs: set[str] = set()
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) < 7 or parts[1] not in ("Add", "Rmv") or SERVICE not in line:
+            continue
+        mac = parts[-1].split("@", 1)[0].lower()
+        if MAC.match(mac):
+            (macs.add if parts[1] == "Add" else macs.discard)(mac)
+    return macs
+
+
+class HostStatus(threading.Thread):
+    """Every interval, write which iPhones usbmuxd lists and which it dropped."""
+
+    def __init__(self, unix_socket_path: str, path: str, interval: int = 30) -> None:
+        super().__init__(daemon=True)
+        self.unix_socket_path, self.path, self.interval = unix_socket_path, path, interval
+
+    def _load(self) -> dict:
+        try:
+            data = json.loads(open(self.path, encoding="utf-8").read())
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def run(self) -> None:
+        known = {k: v for k, v in (self._load().get("wifi_macs") or {}).items() if MAC.match(k)}
+        while True:
+            try:
+                listed = set()
+                for props in usbmux_list(self.unix_socket_path):
+                    udid = str(props.get("SerialNumber") or "")
+                    if not udid:
+                        continue
+                    listed.add(udid.lower())
+                    if wifi_mac(props):
+                        known[wifi_mac(props)] = udid.lower()
+                macs = announced_macs()
+                status = {
+                    "updated": int(time.time()),
+                    "listed": sorted(listed),
+                    # Announcing on Wi-Fi with a known identity, yet not listed.
+                    "dropped": sorted({known[m] for m in macs if m in known} - listed),
+                    # Announcing iPhones never seen through usbmuxd (identity unknown).
+                    "unmatched_announced": len([m for m in macs if m not in known]),
+                    "mapped": sorted(set(known.values())),
+                    "wifi_macs": known,
+                }
+                directory = os.path.dirname(self.path)
+                if os.path.isdir(directory):
+                    temporary = self.path + ".tmp"
+                    with open(temporary, "w", encoding="utf-8") as handle:
+                        json.dump(status, handle)
+                    os.replace(temporary, self.path)
+            except (OSError, ValueError, struct.error, plistlib.InvalidFileException) as exc:
+                print(f"Host device status failed: {exc}", file=sys.stderr, flush=True)
+            time.sleep(self.interval)
 
 
 def _recv_exact(sock: socket.socket, size: int) -> bytes:
@@ -209,6 +313,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--socket", default="/var/run/usbmuxd")
     parser.add_argument("--usb-only", action="store_true",
                         help="do not expose Wi-Fi iPhones to the container")
+    parser.add_argument("--status-file", default="",
+                        help="write host iPhone visibility (JSON) for SideLoader")
     return parser.parse_args()
 
 
@@ -226,6 +332,8 @@ def main() -> int:
         print(f"USB mux path is not a socket: {args.socket}", file=sys.stderr)
         return 1
 
+    if args.status_file:
+        HostStatus(args.socket, args.status_file).start()
     try:
         with RelayServer((args.host, args.port), args.socket, wifi=not args.usb_only) as server:
             print(
