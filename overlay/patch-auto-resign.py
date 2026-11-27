@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the canonical six-hour automatic renewal scheduler."""
+"""Install the canonical automatic renewal scheduler (renews below six days)."""
 from pathlib import Path
 import re
 import sys
@@ -107,6 +107,9 @@ page = re.sub(
     '', page, count=1, flags=re.S)
 page = page.replace(
     'Automatic renewal is a preference, not a setup step. Enable it after the first successful manual install. Signing pauses on a failed attempt.',
-    'Automatically re-signs every installed app with less than 6 hours remaining. Enable it after the first successful manual install. Signing pauses on a failed attempt.')
+    'Automatically re-signs every installed app with less than 6 days remaining. Enable it after the first successful manual install. Signing pauses on a failed attempt.')
+# Builds reuse the patched checkout; update the earlier six-hour wording too.
+page = page.replace('every installed app with less than 6 hours remaining.',
+                    'every installed app with less than 6 days remaining.')
 index.write_text(page)
-print("SideLoader automatic renewal installed: all due apps, six-hour threshold.")
+print("SideLoader automatic renewal installed: all due apps, six-day threshold, source updates.")

@@ -45,7 +45,9 @@ if '        return save_account(self, data)' not in source:
 
 watcher = root / "sideloop" / "watcher.py"
 watcher_source = watcher.read_text()
-canonical_watcher = "RENEW_BEFORE_SECONDS = 6 * 60 * 60" in watcher_source
+# Earlier builds installed a watcher with only the RENEW_BEFORE_SECONDS line.
+canonical_watcher = ("# SideLoader canonical watcher" in watcher_source
+                     or "RENEW_BEFORE_SECONDS = " in watcher_source)
 if not canonical_watcher:
     replace(watcher,
         "from . import config, store, retry_guard",

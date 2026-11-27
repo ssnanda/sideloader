@@ -14,9 +14,9 @@ server = package / "server.py"
 index = package / "index.html"
 
 
-def replace_once(path, old, new, label):
+def replace_once(path, old, new, label, done_if=None):
     text = path.read_text()
-    if new in text:
+    if new in text or (done_if and done_if in text):
         return
     count = text.count(old)
     if count != 1:
@@ -67,6 +67,9 @@ replace_once(
     '                if auth.check_password(str(data.get("password", ""))):\n',
     '                if auth.check_password(str(data.get("username", "")), str(data.get("password", ""))):\n',
     "login username",
+    # patch-account-debug.py later rewrites this check (trimmed username +
+    # sign-in recording); builds reuse the patched checkout.
+    done_if="_sl_auth_event(self, ok, raw_user, password)",
 )
 replace_once(
     index,
@@ -91,6 +94,8 @@ replace_once(
     '    try { await api(first ? "/api/auth/setup" : "/api/auth/login", {json:{password:$("#pw").value}}); boot(); }',
     '    try { await api(first ? "/api/auth/setup" : "/api/auth/login", {json:{username:$("#user").value,password:$("#pw").value}}); boot(); }',
     "username submission",
+    # patch-account-debug.py later rewrites this submit handler (timer).
+    done_if='{json:{username:$("#user").value.trim(),password:$("#pw").value}}',
 )
 
 print("Generated local username and password login installed.")
