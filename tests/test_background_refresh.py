@@ -27,6 +27,11 @@ class BackgroundRefreshTests(unittest.TestCase):
         for gate in ('cfg["AUTO_CHECK"] != "1"', "is_verified()", 'retry_guard.status().get("blocked")'):
             self.assertIn(gate, WATCHER)
 
+    def test_client_kicks_are_throttled(self):
+        self.assertIn("KICK_RENEW_INTERVAL = 60", WATCHER)
+        self.assertIn("KICK_UPDATE_INTERVAL = 15 * 60", WATCHER)
+        self.assertIn("if now - self.last_kick.get(key, 0) < KICK_RENEW_INTERVAL:", WATCHER)
+
     def test_routes_are_authenticated(self):
         self.assertIn('if path == "/api/auto/run":\\n', PATCH)
         self.assertIn('if not self.authed():', PATCH)

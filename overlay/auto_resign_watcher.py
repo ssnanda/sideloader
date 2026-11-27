@@ -18,6 +18,8 @@ IDLE_INTERVAL = 60 * 60
 UPDATE_INTERVAL = 6 * 60 * 60
 UPDATE_RETRY = 24 * 60 * 60
 ARRIVAL_DEBOUNCE = 5 * 60
+KICK_RENEW_INTERVAL = 60
+KICK_UPDATE_INTERVAL = 15 * 60
 RUN_TIMEOUT = 6 * 60 * 60
 
 
@@ -41,6 +43,8 @@ class Watcher:
         self.update_requested = False
         self.failed_updates = {}
         self.last_poke = {}
+        self.last_kick = {}
+        self.last_kick_update = 0
         self.queue = set()
         self.lock = threading.Lock()
         self.status = {"paused": "", "last_run": None, "last_rc": None, "last_message": "",
@@ -110,14 +114,25 @@ class Watcher:
         log(f"watcher: {store.device_name(udid)} came online")
 
     def kick(self, udid=None):
-        """A signed-in client (TapTether) reports the phone is on this network."""
+        """A signed-in client (TapTether) reports the phone is on this network.
+
+        Clients call this on every screen load; repeat calls are throttled so
+        they never refetch every source or flood the log.
+        """
+        now = time.time()
         with self.lock:
+            self.status["last_kick"] = int(now)
+            key = udid or "*"
+            if now - self.last_kick.get(key, 0) < KICK_RENEW_INTERVAL:
+                return
+            self.last_kick[key] = now
             if udid:
                 self.queue.add(udid)
             else:
                 self.next_run = 0
-            self.update_requested = True
-            self.status["last_kick"] = int(time.time())
+            if now - self.last_kick_update >= KICK_UPDATE_INTERVAL:
+                self.last_kick_update = now
+                self.update_requested = True
         log(f"watcher: check requested{' for ' + store.device_name(udid) if udid else ''}")
 
     def status_view(self):
