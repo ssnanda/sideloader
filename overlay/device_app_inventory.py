@@ -123,6 +123,11 @@ def inventory(udid):
         except (OSError, subprocess.TimeoutExpired, plistlib.InvalidFileException,
                 ValueError, RuntimeError) as err:
             last = str(err)[:250]
+    if 'No device found' in last:
+        # macOS usbmuxd is not listing this iPhone (asleep, off Wi-Fi, or a
+        # dropped Wi-Fi link). /api/state's device problem has the fix steps.
+        raise RuntimeError('Cannot scan the iPhone: macOS is not listing it to SideLoader, '
+                           'so SideLoader cannot reach it right now.')
     raise RuntimeError('Cannot scan the iPhone: ' + last)
 
 

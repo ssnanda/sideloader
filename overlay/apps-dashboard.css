@@ -85,3 +85,12 @@
 }
 .sl-app-filter{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;padding:8px 2px;cursor:pointer;}
 .sl-app-filter input{width:18px;height:18px;accent-color:var(--blue);}
+
+/* Offline iPhone diagnosis (slDeviceProblemCard) */
+.sl-device-problem{margin:8px 0 4px;padding:10px 14px;border-radius:12px;border:1px solid var(--orange);background:color-mix(in srgb,var(--orange) 8%,transparent);font-size:14px}
+.sl-device-problem.error{border-color:var(--red);background:color-mix(in srgb,var(--red) 8%,transparent)}
+.sl-device-problem b{display:block;color:var(--orange)}
+.sl-device-problem.error b{color:var(--red)}
+.sl-device-problem ol{margin:6px 0 0;padding-left:20px}
+.sl-device-problem li{margin:2px 0}
+.sl-device-problem small{display:block;margin-top:6px;color:var(--label-2)}

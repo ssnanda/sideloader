@@ -315,7 +315,7 @@ function deviceAppsManager() {
       <button type="button" class="cap" id="sideloader-resign-all" ${busy||blocked||!resignable.length?"disabled":""}>Re-sign all</button>
       <button type="button" class="cap solid" id="sideloader-add-app" ${busy?"disabled":""}>${appAddOpen?"Close":"Add app"}</button>
     </div>
-    ${deviceAppError?`<div class="foot" style="color:var(--red)">${esc(deviceAppError)}</div>`:""}
+    ${slDeviceProblemCard(devs.find(d => d.udid === udid), deviceAppError)}
     ${sourceCatalogError?`<div class="foot" style="color:var(--red)">Update check: ${esc(sourceCatalogError)}</div>`:""}
     ${scanned && sourceCatalogLoaded && availableUpdates.length ? `<div class="sl-update-summary">${availableUpdates.length} update${availableUpdates.length===1?"":"s"} available from saved sources</div>` : ""}
     <div class="sl-installed-title"><b>Installed apps</b>${scanned?`<span>${rows.length}</span>`:""}</div>
@@ -376,4 +376,17 @@ async function uninstallDeviceApps(udid, bundles) {
 
 function singleAppSigning(app, udid, installed) {
   slInstall(app, udid, installed);
+}
+
+/* Offline iPhone: server-diagnosed ERROR/WARNING, cause and numbered fix
+   steps (patch-device-hints.py). The raw tool error becomes a detail line. */
+function slDeviceProblemCard(device, rawError) {
+  const problem = device && device.problem;
+  if (!problem) return rawError ? `<div class="foot" style="color:var(--red)">${esc(rawError)}</div>` : "";
+  const error = problem.level === "error";
+  return `<div class="sl-device-problem ${error ? "error" : "warning"}" role="alert">
+    <b>${error ? "ERROR" : "WARNING"}: ${esc(problem.title)}</b>
+    <ol>${(problem.steps || []).map(step => `<li>${esc(step)}</li>`).join("")}</ol>
+    ${rawError ? `<small>Details: ${esc(rawError)}</small>` : ""}
+  </div>`;
 }
