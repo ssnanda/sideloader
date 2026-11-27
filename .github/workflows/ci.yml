@@ -1,0 +1,69 @@
+name: SideLoader CI
+
+on:
+  # Normal VS Code commits, version bumps and Docker builds never launch CI.
+  # Run the offline checks only with an explicit manual action.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sideloader-ci
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Check overlay Python syntax
+        run: python3 -m compileall -q overlay
+      - name: Check dashboard JavaScript syntax
+        run: |
+          node --check overlay/apps-dashboard-ui.js
+          node --check overlay/apps-dashboard-wire.js
+          node --check overlay/screen-flow-ui.js
+      - name: Run offline regression tests
+        run: |
+          python3 -m unittest discover -s tests -p 'test_reinstall_latest.py' -v
+          python3 -m unittest discover -s tests -p 'test_remote_server.py' -v
+          python3 -m unittest discover -s tests -p 'test_remote_patch_smoke.py' -v
+
+  cleanup:
+    name: Cleanup old completed workflow runs
+    needs: [validate]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Prune previous SideLoader CI records
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Preserve the newest 3 successes and 2 failures for diagnosis.
+          # Older completed/cancelled SideLoader runs are safe to prune.
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" > "$RUNNER_TEMP/runs.json"
+          jq -r --argjson current "$GITHUB_RUN_ID" '
+            [.workflow_runs[]
+            | select(.name == "SideLoader CI"
+                     or .name == "SideLoader CI and Companion Release"
+                     or .name == "Build and publish SideLoader Companion IPA"
+                     or .name == "Validate SideLoader Docker overlays")
+            | select(.status == "completed")
+            | select(.id != $current)] as $runs
+            | ($runs | map(select(.conclusion == "success")) | .[3:] | .[].id),
+              ($runs | map(select(.conclusion == "failure")) | .[2:] | .[].id),
+              ($runs | map(select(.conclusion == "cancelled")) | .[].id)
+          ' "$RUNNER_TEMP/runs.json" | sort -u > "$RUNNER_TEMP/delete-ids.txt"
+          while IFS= read -r id; do
+            [[ -n "$id" ]] || continue
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$id" >/dev/null ||
+              echo "Warning: could not delete old run $id" >&2
+          done < "$RUNNER_TEMP/delete-ids.txt"
+

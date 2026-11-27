@@ -198,6 +198,15 @@ if 'def view(self, since=None):' in jobs and '"verification_seconds_remaining":'
         '                "verification_seconds_remaining": max(0, int(self.verification_deadline - time.monotonic() + 0.999)) if self.verification_deadline is not None else None,',
         'show remaining verification time')
 
+# Runs before the deadline step, which builds on this heading (fresh checkouts).
+# The unit-test fixture has only the input element, while the complete
+# upstream dashboard includes the surrounding challenge explanation.
+if '<h2>Verification Code</h2><p>Enter the code sent to your Apple devices.</p>' in page:
+    page = change(page,
+        '<h2>Verification Code</h2><p>Enter the code sent to your Apple devices.</p>',
+        '<h2>Apple Verification Code</h2><p>Apple sends the six-digit code to your trusted devices when this sign-in reaches verification. Enter it here to continue this same installation attempt.</p>',
+        'explain code delivery at active 2FA prompt')
+
 if '<form class="otp" id="askf">' in page:
     page = change(page,
         '<h2>Apple Verification Code</h2><p>Apple sends the six-digit code to your trusted devices when this sign-in reaches verification. Enter it here to continue this same installation attempt.</p>',
@@ -212,14 +221,6 @@ if '<form class="otp" id="askf">' in page:
   }
   box._mode = mode; box._stage = j.stage;''',
         'update 2FA countdown without resetting input')
-
-# The unit-test fixture has only the input element, while the complete
-# upstream dashboard includes the surrounding challenge explanation.
-if '<h2>Verification Code</h2><p>Enter the code sent to your Apple devices.</p>' in page:
-    page = change(page,
-        '<h2>Verification Code</h2><p>Enter the code sent to your Apple devices.</p>',
-        '<h2>Apple Verification Code</h2><p>Apple sends the six-digit code to your trusted devices when this sign-in reaches verification. Enter it here to continue this same installation attempt.</p>',
-        'explain code delivery at active 2FA prompt')
 
 # Expose whether the real AltServer console callback ever requested 2FA.
 # This distinguishes Apple failures before 2FA from a code challenge that

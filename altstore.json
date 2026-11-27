@@ -1,64 +1,12 @@
 {
   "name": "SideLoader",
   "identifier": "com.ajnanda.sideloader.source",
-  "subtitle": "SideLoader companion apps",
-  "description": "Official SideLoader apps published by ssnanda.",
+  "subtitle": "No apps published",
+  "description": "SideLoader Companion was retired; use TapTether → Settings → SideLoader instead.",
   "sourceURL": "https://raw.githubusercontent.com/ssnanda/sideloader/main/altstore.json",
   "website": "https://github.com/ssnanda/sideloader",
-  "iconURL": "https://raw.githubusercontent.com/ssnanda/sideloader/main/companion/AppIcon.png",
   "tintColor": "087AF0",
-  "featuredApps": [
-    "com.ajnanda.SideLoaderCompanion"
-  ],
-  "apps": [
-    {
-      "name": "SideLoader Companion",
-      "bundleIdentifier": "com.ajnanda.SideLoaderCompanion",
-      "developerName": "AJ Nanda",
-      "subtitle": "View and re-sign installed SideLoader apps.",
-      "localizedDescription": "Connect to SideLoader using LAN or NetBird. Scan your iPhone's installed apps and re-sign individual SideLoader-managed apps, with live signing status and Apple verification-code entry.",
-      "iconURL": "https://raw.githubusercontent.com/ssnanda/sideloader/main/companion/AppIcon.png",
-      "tintColor": "087AF0",
-      "category": "utilities",
-      "versions": [
-        {
-          "version": "1.0",
-          "buildVersion": "74",
-          "date": "2026-11-23",
-          "localizedDescription": "Verified installed-app list, live refresh, individual per-app re-signing with status and Apple verification-code entry.",
-          "downloadURL": "https://github.com/ssnanda/sideloader/releases/download/v0.2.29/sideloader-companion.ipa",
-          "size": 178401,
-          "minOSVersion": "17.0"
-        },
-        {
-          "version": "1.0",
-          "buildVersion": "71",
-          "date": "2026-11-23",
-          "localizedDescription": "Verified installed-app list, live refresh, individual per-app re-signing with status and Apple verification-code entry.",
-          "downloadURL": "https://github.com/ssnanda/sideloader/releases/download/v0.2.26/sideloader-companion.ipa",
-          "size": 165860,
-          "minOSVersion": "17.0"
-        },
-        {
-          "version": "1.0",
-          "buildVersion": "69",
-          "date": "2026-11-23",
-          "localizedDescription": "Verified installed-app list, live refresh, individual per-app re-signing with status and Apple verification-code entry.",
-          "downloadURL": "https://github.com/ssnanda/sideloader/releases/download/v0.2.24/sideloader-companion.ipa",
-          "size": 165860,
-          "minOSVersion": "17.0"
-        },
-        {
-          "version": "1.0",
-          "buildVersion": "1",
-          "date": "2026-11-22",
-          "localizedDescription": "Initial SideLoader Companion release.",
-          "downloadURL": "https://github.com/ssnanda/sideloader/releases/latest/download/sideloader-companion.ipa",
-          "size": 119374,
-          "minOSVersion": "17.0"
-        }
-      ]
-    }
-  ],
+  "featuredApps": [],
+  "apps": [],
   "news": []
 }
